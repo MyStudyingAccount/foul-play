@@ -91,6 +91,10 @@ async def run_foul_play():
             )
         elif FoulPlayConfig.bot_mode == BotModes.search_ladder:
             await ps_websocket_client.search_for_match(FoulPlayConfig.pokemon_format)
+        elif FoulPlayConfig.bot_mode == BotModes.resume_active:
+            # Do not initiate any searches or challenges. Just wait to receive
+            # existing or incoming battles and take them over.
+            logger.info("Resume active mode: waiting to take over any active/incoming battles")
         else:
             raise ValueError("Invalid Bot Mode: {}".format(FoulPlayConfig.bot_mode))
 

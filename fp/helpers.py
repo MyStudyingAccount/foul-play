@@ -1,6 +1,5 @@
 import math
 import constants
-from config import FoulPlayConfig
 
 natures = {
     "lonely": {"plus": constants.ATTACK, "minus": constants.DEFENSE},
@@ -160,6 +159,8 @@ def _calculate_stats(base_stats, level, ivs=(31,) * 6, evs=(85,) * 6, nature="se
 
 
 def calculate_stats(base_stats, level, ivs=(31,) * 6, evs=(85,) * 6, nature="serious"):
+    from config import FoulPlayConfig
+    
     if any(g in FoulPlayConfig.pokemon_format for g in ["gen1", "gen2"]):
         return _calculate_stats_gen_1_2(base_stats, level)
     else:

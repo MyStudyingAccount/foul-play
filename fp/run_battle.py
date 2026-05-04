@@ -53,7 +53,7 @@ def format_decision(battle, decision):
         ):
             message = "{} {}".format(message, constants.DYNAMAX)
 
-        if tera:
+        if tera and battle.generation == "gen9":
             message = "{} {}".format(message, constants.TERASTALLIZE)
 
         if battle.user.active.get_move(decision).can_z:
@@ -80,8 +80,29 @@ def extract_battle_factory_tier_from_msg(msg):
 
 async def async_pick_move(battle):
     battle_copy = deepcopy(battle)
-    if not battle_copy.team_preview:
-        battle_copy.user.update_from_request_json(battle_copy.request_json)
+    if not battle_copy.team_preview and battle_copy.request_json:
+        # The request JSON can refer to either p1 or p2. Update the correct battler
+        try:
+            side_id = battle_copy.request_json[constants.SIDE][constants.ID]
+        except Exception:
+            side_id = None
+
+        if side_id == battle_copy.user.name:
+            try:
+                battle_copy.user.update_from_request_json(battle_copy.request_json)
+            except ValueError:
+                logger.debug("User update_from_request_json raised ValueError on copy; skipping")
+        elif side_id == battle_copy.opponent.name:
+            try:
+                battle_copy.opponent.update_from_request_json(battle_copy.request_json)
+            except ValueError:
+                logger.debug("Opponent update_from_request_json raised ValueError on copy; skipping")
+        else:
+            # fallback: try updating user, but ignore mismatches to avoid crashing the search
+            try:
+                battle_copy.user.update_from_request_json(battle_copy.request_json)
+            except Exception:
+                logger.debug("Could not apply request_json to copy; continuing without applying it")
 
     loop = asyncio.get_event_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:

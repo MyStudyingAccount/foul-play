@@ -1,5 +1,6 @@
 import unittest
 
+import constants
 from fp.battle import LastUsedMove
 from fp.battle import Battler
 from fp.battle import Pokemon
@@ -176,3 +177,85 @@ class TestBattlerActiveLockedIntoMove(unittest.TestCase):
         self.assertFalse(self.battler.active.get_move("thunderbolt").disabled)
         self.assertFalse(self.battler.active.get_move("agility").disabled)
         self.assertFalse(self.battler.active.get_move("doubleteam").disabled)
+
+
+class TestBattlerDuplicateSpecies(unittest.TestCase):
+    def test_update_from_request_json_handles_duplicate_species(self):
+        battler = Battler()
+
+        battler.active = Pokemon("mew", 100)
+        battler.active.nickname = "Lead"
+        battler.active.index = 1
+
+        reserve_one = Pokemon("mew", 100)
+        reserve_one.nickname = "CloneA"
+        reserve_one.index = 2
+        reserve_one.add_move("recover")
+
+        reserve_two = Pokemon("mew", 100)
+        reserve_two.nickname = "CloneB"
+        reserve_two.index = 3
+        reserve_two.add_move("softboiled")
+
+        battler.reserve = [reserve_one, reserve_two]
+
+        request_json = {
+            constants.SIDE: {
+                constants.POKEMON: [
+                    {
+                        constants.ACTIVE: True,
+                        constants.DETAILS: "Mew, L100",
+                        constants.IDENT: "p1: Lead",
+                        constants.MOVES: ["psychic"],
+                        constants.CONDITION: "300/300",
+                        constants.REQUEST_DICT_ABILITY: "synchronize",
+                        constants.ITEM: "leftovers",
+                        constants.STATS: {
+                            "atk": 100,
+                            "def": 100,
+                            "spa": 100,
+                            "spd": 100,
+                            "spe": 100,
+                        },
+                    },
+                    {
+                        constants.ACTIVE: False,
+                        constants.DETAILS: "Mew, L100",
+                        constants.IDENT: "p1: CloneA",
+                        constants.MOVES: ["recover"],
+                        constants.CONDITION: "300/300",
+                        constants.REQUEST_DICT_ABILITY: "synchronize",
+                        constants.ITEM: "leftovers",
+                        constants.STATS: {
+                            "atk": 100,
+                            "def": 100,
+                            "spa": 100,
+                            "spd": 100,
+                            "spe": 100,
+                        },
+                    },
+                    {
+                        constants.ACTIVE: False,
+                        constants.DETAILS: "Mew, L100",
+                        constants.IDENT: "p1: CloneB",
+                        constants.MOVES: ["softboiled"],
+                        constants.CONDITION: "300/300",
+                        constants.REQUEST_DICT_ABILITY: "synchronize",
+                        constants.ITEM: "leftovers",
+                        constants.STATS: {
+                            "atk": 100,
+                            "def": 100,
+                            "spa": 100,
+                            "spd": 100,
+                            "spe": 100,
+                        },
+                    },
+                ]
+            }
+        }
+
+        battler.update_from_request_json(request_json)
+
+        self.assertEqual(2, len(battler.reserve))
+        self.assertSetEqual({"CloneA", "CloneB"}, {p.nickname for p in battler.reserve})
+        self.assertSetEqual({2, 3}, {p.index for p in battler.reserve})

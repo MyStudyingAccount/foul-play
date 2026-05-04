@@ -250,6 +250,12 @@ class Battler:
                 return reserve_pkmn
         return None
 
+    def find_reserve_pokemon_by_index(self, pkmn_index):
+        for reserve_pkmn in self.reserve:
+            if getattr(reserve_pkmn, "index", None) == pkmn_index:
+                return reserve_pkmn
+        return None
+
     def lock_active_pkmn_first_turn_moves(self):
         # disable firstimpression and fakeout if the last_used_move was not a switch
         if self.last_used_move.pokemon_name == self.active.name:
@@ -362,12 +368,16 @@ class Battler:
         for index, pkmn_dict in enumerate(
             request_json[constants.SIDE][constants.POKEMON]
         ):
+            request_pkmn_index = index + 1
             switch_string_pkmn = Pokemon.from_switch_string(
                 pkmn_dict[constants.DETAILS]
             )
             pkmn_name = switch_string_pkmn.name
             pkmn_level = switch_string_pkmn.level
             pkmn_status = switch_string_pkmn.status
+            pkmn_nickname = self.active.extract_nickname_from_pokemonshowdown_string(
+                pkmn_dict[constants.IDENT]
+            )
             if pkmn_dict[constants.ACTIVE]:
                 if self.active.name != pkmn_name and self.active.base_name != pkmn_name:
                     raise ValueError(
@@ -381,17 +391,27 @@ class Battler:
 
                 pkmn = self.active
             else:
-                pkmn = self.find_pokemon_in_reserves(pkmn_name)
+                # Duplicate species are legal in some formats; prefer stable identity
+                # from request slot index, then nickname, and finally species fallback.
+                pkmn = self.find_reserve_pokemon_by_index(request_pkmn_index)
+                if pkmn is None and pkmn_nickname:
+                    pkmn = self.find_reserve_pokemon_by_nickname(pkmn_nickname)
+                if pkmn is None:
+                    pkmn = self.find_pokemon_in_reserves(pkmn_name)
+                if pkmn is None:
+                    pkmn = Pokemon.from_switch_string(
+                        pkmn_dict[constants.DETAILS],
+                        nickname=pkmn_dict[constants.IDENT],
+                    )
+                    self.reserve.append(pkmn)
                 for move_name in pkmn_dict[constants.MOVES]:
                     if not pkmn.get_move(move_name):
                         pkmn.add_move(move_name)
 
-            pkmn.index = index + 1
+            pkmn.index = request_pkmn_index
             pkmn.level = pkmn_level
             pkmn.status = pkmn_status
-            pkmn.nickname = self.active.extract_nickname_from_pokemonshowdown_string(
-                pkmn_dict[constants.IDENT]
-            )
+            pkmn.nickname = pkmn_nickname
             pkmn.reviving = pkmn_dict.get(constants.REVIVING, False)
             pkmn.hp, pkmn.max_hp, pkmn.status = get_pokemon_info_from_condition(
                 pkmn_dict[constants.CONDITION]
@@ -406,26 +426,14 @@ class Battler:
         Re-initializes the active pokemon based on the last request JSON that was received
         This is useful when the bot's active pkmn has mega-evolved. We need to get the new stats/hp
         """
-        pokedex_name = normalize_name(pokedex[self.active.name][constants.NAME])
         request_json_active_pkmn = [
             p
             for p in request_json["side"]["pokemon"]
-            if normalize_name(p[constants.DETAILS]).split(",")[0] == pokedex_name
-            or normalize_name(p[constants.DETAILS]).split(",")[0]
-            == self.active.base_name
+            if p.get(constants.ACTIVE, False)
         ]
-        if pokedex_name == "terapagosstellar" and len(request_json_active_pkmn) == 0:
-            request_json_active_pkmn = [
-                p
-                for p in request_json["side"]["pokemon"]
-                if normalize_name(p[constants.DETAILS]).split(",")[0]
-                == "terapagosterastal"
-                or normalize_name(p[constants.DETAILS]).split(",")[0]
-                == self.active.base_name
-            ]
         assert (
             len(request_json_active_pkmn) == 1
-        ), f"Didn't find exactly 1 {pokedex_name}, pokemon: {request_json}"
+        ), f"Didn't find exactly 1 active pokemon in request_json: {request_json}"
         pkmn_info = request_json_active_pkmn[0]
         for stat, number in pkmn_info[constants.STATS].items():
             self.active.stats[constants.STAT_ABBREVIATION_LOOKUPS[stat]] = number
@@ -708,11 +716,17 @@ class Pokemon:
     def add_move(self, move_name: str):
         try:
             new_move = Move(move_name)
-            self.moves.append(new_move)
-            return new_move
         except KeyError:
             logger.warning("{} is not a known move".format(move_name))
             return None
+
+        # Avoid adding duplicate moves (some formats report variants like frustration1)
+        for m in self.moves:
+            if m.name == new_move.name:
+                return m
+
+        self.moves.append(new_move)
+        return new_move
 
     def remove_move(self, move_name: str):
         for mv in self.moves:
@@ -752,6 +766,8 @@ class Pokemon:
 class Move:
     def __init__(self, name):
         name = normalize_name(name)
+        
+        # Handle hiddenpower variants (e.g., hiddenpowerfire70)
         if (
             constants.HIDDEN_POWER != name
             and constants.HIDDEN_POWER in name
@@ -760,6 +776,18 @@ class Move:
             name = "{}{}".format(
                 name, constants.HIDDEN_POWER_ACTIVE_MOVE_BASE_DAMAGE_STRING
             )
+        
+        # Handle return variants (e.g., return1, return37, return102)
+        # Map them to return102 if it exists, otherwise base return
+        if name.startswith("return") and name != "return":
+            if "return102" in all_move_json:
+                name = "return102"
+        
+        # Handle frustration variants (e.g., frustration1, frustration10)
+        # Map them to base frustration
+        if name.startswith("frustration") and name != "frustration":
+            name = "frustration"
+        
         move_json = all_move_json[name]
         self.name = name
         self.max_pp = int(move_json.get(constants.PP) * 1.6)

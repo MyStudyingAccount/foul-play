@@ -35,7 +35,7 @@ def status_to_string(status):
     raise ValueError(f"Unknown status: {status}")
 
 
-def pokemon_to_poke_engine_pkmn(pkmn: Pokemon):
+def pokemon_to_poke_engine_pkmn(pkmn: Pokemon, enable_tera: bool = True):
     """
     id,level,type0,type1,hp,maxhp,ability,item,atk,def,spa,spd,spe,atkb,defb,spab,spdb,speb,accb,evab,status,subhp,restturns
     nature,volatiles,m0,m1,m2,m3
@@ -95,8 +95,8 @@ def pokemon_to_poke_engine_pkmn(pkmn: Pokemon):
         sleep_turns=pkmn.sleep_turns,
         weight_kg=float(pokedex[pkmn.name][constants.WEIGHT]),
         moves=pkmn_moves,
-        tera_type=pkmn.tera_type or "typeless",
-        terastallized=pkmn.terastallized,
+        tera_type=pkmn.tera_type or "typeless" if enable_tera else "typeless",
+        terastallized=pkmn.terastallized if enable_tera else False,
     )
 
 
@@ -105,7 +105,7 @@ def get_dummy_poke_engine_pkmn():
 
 
 def battler_to_poke_engine_side(
-    battler: Battler, force_switch=False, stayed_in_on_switchout_move=False
+    battler: Battler, force_switch=False, stayed_in_on_switchout_move=False, enable_tera: bool = True
 ):
     num_reserves = len(battler.reserve)
     last_used_move = "move:none"
@@ -159,8 +159,8 @@ def battler_to_poke_engine_side(
         active_index="0",
         baton_passing=battler.baton_passing,
         shed_tailing=battler.shed_tailing,
-        pokemon=[pokemon_to_poke_engine_pkmn(battler.active)]
-        + [pokemon_to_poke_engine_pkmn(p) for p in battler.reserve],
+        pokemon=[pokemon_to_poke_engine_pkmn(battler.active, enable_tera=enable_tera)]
+        + [pokemon_to_poke_engine_pkmn(p, enable_tera=enable_tera) for p in battler.reserve],
         side_conditions=PokeEngineSideConditions(
             aurora_veil=battler.side_conditions[constants.AURORA_VEIL],
             crafty_shield=battler.side_conditions["craftyshield"],
@@ -291,6 +291,24 @@ def replace_return_last_used_move(battler: Battler):
         )
 
 
+def replace_frustration_last_used_move(battler: Battler):
+    for mv in battler.active.moves:
+        if mv.name.startswith("frustration"):
+            battler.last_used_move = LastUsedMove(
+                pokemon_name=battler.last_used_move.pokemon_name,
+                move=mv.name,
+                turn=battler.last_used_move.turn,
+            )
+            break
+    else:
+        logger.warning("Could not replace frustration")
+        battler.last_used_move = LastUsedMove(
+            pokemon_name=battler.last_used_move.pokemon_name,
+            move="switch {}".format(battler.active.name),
+            turn=battler.last_used_move.turn,
+        )
+
+
 def battle_to_poke_engine_state(battle: Battle, swap=False):
     # Boolean that represents if we have used a switch-out move first (i.e. fast uturn)
     # this is toggled to True if we did, and signifies to the engine that the opponent has
@@ -305,17 +323,24 @@ def battle_to_poke_engine_state(battle: Battle, swap=False):
         replace_hidden_power_last_used_move(battle.opponent)
     elif battle.opponent.last_used_move.move == "return":
         replace_return_last_used_move(battle.opponent)
+    elif battle.opponent.last_used_move.move == "frustration":
+        replace_frustration_last_used_move(battle.opponent)
 
     if battle.user.last_used_move.move == constants.HIDDEN_POWER:
         replace_hidden_power_last_used_move(battle.user)
-    if battle.user.last_used_move.move == "return":
+    elif battle.user.last_used_move.move == "return":
         replace_return_last_used_move(battle.user)
+    elif battle.user.last_used_move.move == "frustration":
+        replace_frustration_last_used_move(battle.user)
+
+    # Only enable Terastallization evaluation for Gen 9 to save computational resources
+    enable_tera = "gen9" in battle.generation
 
     side_one = battler_to_poke_engine_side(
-        battle.user, force_switch=battle.force_switch
+        battle.user, force_switch=battle.force_switch, enable_tera=enable_tera
     )
     side_two = battler_to_poke_engine_side(
-        battle.opponent, stayed_in_on_switchout_move=opponent_switchout_move_stayed_in
+        battle.opponent, stayed_in_on_switchout_move=opponent_switchout_move_stayed_in, enable_tera=enable_tera
     )
 
     if swap:

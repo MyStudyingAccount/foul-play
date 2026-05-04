@@ -35,6 +35,8 @@ def log_pkmn_set(pkmn: Pokemon, source=None):
 def populate_pkmn_from_set(
     pkmn: Pokemon, set_: PredictedPokemonSet, source: str = None
 ):
+    from config import FoulPlayConfig
+    
     known_pokemon_moves = pkmn.moves
 
     pkmn.moves = []
@@ -47,10 +49,13 @@ def populate_pkmn_from_set(
         set_.pkmn_set.nature,
         ",".join(str(x) for x in set_.pkmn_set.evs),
     )
+    # Only apply Tera Type in Gen 9 to save computational resources
+    # Terastallization mechanic is only available in Gen 9+
     if (
         set_.pkmn_set.tera_type is not None
         and not pkmn.terastallized
         and not pkmn.tera_type
+        and "gen9" in FoulPlayConfig.pokemon_format
     ):
         pkmn.tera_type = set_.pkmn_set.tera_type
     log_pkmn_set(pkmn, source)
