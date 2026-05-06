@@ -618,6 +618,23 @@ class TestSwitchOrDrag(unittest.TestCase):
 
         self.assertIn(self.opponent_active, self.battle.opponent.reserve)
 
+    def test_switch_keeps_reserve_order_when_previous_active_is_returned_to_reserve(
+        self,
+    ):
+        self.battle.user.active = Pokemon("pikachu", 100)
+        self.battle.user.active.index = 1
+
+        charizard = Pokemon("charizard", 100)
+        charizard.index = 2
+        bulbasaur = Pokemon("bulbasaur", 100)
+        bulbasaur.index = 3
+        self.battle.user.reserve = [charizard, bulbasaur]
+
+        split_msg = ["", "switch", "p1a: Charizard", "Charizard, L100, M", "100/100"]
+        switch_or_drag(self.battle, split_msg)
+
+        self.assertEqual(["pikachu", "bulbasaur"], [p.name for p in self.battle.user.reserve])
+
     def test_switch_opponents_pokemon_creates_reserve_of_length_1_when_reserve_was_previously_empty(
         self,
     ):

@@ -281,6 +281,21 @@ def drag(battle, split_msg):
     switch_or_drag(battle, split_msg, switch_or_drag="drag")
 
 
+def _insert_reserve_pokemon_in_index_order(side, pkmn):
+    pkmn_index = getattr(pkmn, "index", None)
+    if pkmn_index is None:
+        side.reserve.append(pkmn)
+        return
+
+    for insert_at, reserve_pkmn in enumerate(side.reserve):
+        reserve_index = getattr(reserve_pkmn, "index", None)
+        if reserve_index is not None and reserve_index > pkmn_index:
+            side.reserve.insert(insert_at, pkmn)
+            return
+
+    side.reserve.append(pkmn)
+
+
 def switch_or_drag(battle, split_msg, switch_or_drag="switch"):
     if is_opponent(battle, split_msg):
         side_name = "opponent"
@@ -512,7 +527,7 @@ def switch_or_drag(battle, split_msg, switch_or_drag="switch"):
 
     # pkmn != active is a special edge-case for Zoroark
     if side.active is not None and pkmn != side.active:
-        side.reserve.append(side.active)
+        _insert_reserve_pokemon_in_index_order(side, side.active)
 
     side.active = pkmn
 
@@ -1942,7 +1957,7 @@ def _switch_active_with_zoroark_from_reserves(
     zoroark_from_reserves.zoroark_disguised_as = pkmn.name
 
     # swap the pkmn places
-    opponent_side.reserve.append(pkmn)
+    _insert_reserve_pokemon_in_index_order(opponent_side, pkmn)
     opponent_side.active = zoroark_from_reserves
     opponent_side.reserve.remove(zoroark_from_reserves)
 
@@ -2023,7 +2038,7 @@ def illusion_end(battle, split_msg):
 
         pkmn_disguised_as = side.active
         pkmn_disguised_as.item = constants.UNKNOWN_ITEM
-        side.reserve.append(pkmn_disguised_as)
+        _insert_reserve_pokemon_in_index_order(side, pkmn_disguised_as)
         if zoroark_reserve_index is not None:
             reserve_zoroark = side.reserve.pop(zoroark_reserve_index)
             side.active = reserve_zoroark
