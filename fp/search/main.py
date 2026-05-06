@@ -16,7 +16,7 @@ from fp.search.poke_engine_helpers import battle_to_poke_engine_state
 logger = logging.getLogger(__name__)
 
 
-def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)]) -> str:
+def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], battle: Battle) -> str:
     final_policy = {}
     for mcts_result, sample_chance, index in mcts_results:
         this_policy = max(mcts_result.side_one, key=lambda x: x.visits)
@@ -34,9 +34,34 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)]) 
                 s1_option.move_choice, 0
             ) + (sample_chance * (s1_option.visits / mcts_result.total_visits))
 
-    final_policy = sorted(final_policy.items(), key=lambda x: x[1], reverse=True)
+    # Apply simple ability-aware adjustments (e.g., preferring switches to Magic Bounce)
+    adjusted_policy = {}
+    for move_choice, score in final_policy.items():
+        adjusted_score = score
+        try:
+            if move_choice.startswith("switch "):
+                target_name = move_choice.split(" ", 1)[1].strip()
+                # try to find reserve pokemon by name
+                target_pkmn = battle.user.find_pokemon_in_reserves(target_name)
+                if target_pkmn is not None:
+                    ability = (target_pkmn.ability or "").lower()
+                    # boost switches into Magic Bounce users when opponent can use status/hazard moves
+                    if ability in ("magicbounce", "magic_bounce"):
+                        opp_moves = [m.name for m in (battle.opponent.active.moves or [])]
+                        dangerous = any(
+                            m in ("taunt", "stealthrock", "spikes", "toxicspikes", "whirlwind", "rapidspin", "defog")
+                            for m in opp_moves
+                        )
+                        if dangerous:
+                            adjusted_score = adjusted_score * 1.5
+        except Exception:
+            # be conservative on any unexpected error
+            adjusted_score = score
+        adjusted_policy[move_choice] = adjusted_score
 
-    # Consider all moves that are close to the best move
+    final_policy = sorted(adjusted_policy.items(), key=lambda x: x[1], reverse=True)
+
+    # Consider all moves that are close to the best move (after adjustment)
     highest_percentage = final_policy[0][1]
     final_policy = [i for i in final_policy if i[1] >= highest_percentage * 0.75]
     logger.info("Considered Choices:")
@@ -140,6 +165,6 @@ def find_best_move(battle: Battle) -> str:
             futures.append((fut, chance, index))
 
     mcts_results = [(fut.result(), chance, index) for (fut, chance, index) in futures]
-    choice = select_move_from_mcts_results(mcts_results)
+    choice = select_move_from_mcts_results(mcts_results, battle)
     logger.info("Choice: {}".format(choice))
     return choice
