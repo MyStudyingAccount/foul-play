@@ -19,18 +19,70 @@ from fp.websocket_client import PSWebsocketClient
 logger = logging.getLogger(__name__)
 
 
+def _reserve_debug_snapshot(battle):
+    snapshot = []
+    for p in battle.user.reserve:
+        snapshot.append(
+            {
+                "index": getattr(p, "index", None),
+                "name": p.name,
+                "base_name": p.base_name,
+                "nickname": p.nickname,
+            }
+        )
+    return snapshot
+
+
 def format_decision(battle, decision):
     # Formats a decision for communication with Pokemon-Showdown
     # If the move can be used as a Z-Move, it will be
 
     if decision.startswith(constants.SWITCH_STRING + " "):
         switch_pokemon = decision.split("switch ")[-1]
-        for pkmn in battle.user.reserve:
-            if pkmn.name == switch_pokemon:
-                message = "/switch {}".format(pkmn.index)
-                break
+        matches = [
+            pkmn
+            for pkmn in battle.user.reserve
+            if pkmn.name == switch_pokemon
+            or pkmn.base_name == switch_pokemon
+            or (pkmn.nickname and normalize_name(pkmn.nickname) == switch_pokemon)
+        ]
+        if len(matches) > 1:
+            logger.warning(
+                "Ambiguous switch target '%s' with duplicate species. Matches=%s",
+                switch_pokemon,
+                [
+                    {
+                        "index": getattr(p, "index", None),
+                        "name": p.name,
+                        "nickname": p.nickname,
+                    }
+                    for p in matches
+                ],
+            )
+
+        if matches:
+            # Prefer stable request slot index when available.
+            chosen = sorted(
+                matches,
+                key=lambda p: (
+                    getattr(p, "index", None) is None,
+                    getattr(p, "index", 999),
+                ),
+            )[0]
+            message = "/switch {}".format(chosen.index)
+            logger.debug(
+                "Resolved switch decision '%s' -> index=%s (name=%s nickname=%s)",
+                decision,
+                chosen.index,
+                chosen.name,
+                chosen.nickname,
+            )
         else:
-            raise ValueError("Tried to switch to: {}".format(switch_pokemon))
+            raise ValueError(
+                "Tried to switch to: {} reserve_snapshot={}".format(
+                    switch_pokemon, _reserve_debug_snapshot(battle)
+                )
+            )
     else:
         tera = False
         mega = False
@@ -125,6 +177,11 @@ async def handle_team_preview(battle, ps_websocket_client):
     # Use the preview copy here because the live battle may not have an active Pokemon yet.
     # `async_pick_move` clones internally for search and formats against the battle it receives.
     best_move = await async_pick_move(battle_copy)
+    logger.debug(
+        "Team preview raw choice=%s reserve_snapshot=%s",
+        best_move,
+        _reserve_debug_snapshot(battle),
+    )
 
     pkmn_name = battle.user.reserve[int(best_move[0].split()[1]) - 1].name
     battle.user.last_selected_move = LastUsedMove(
