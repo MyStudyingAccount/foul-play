@@ -365,6 +365,22 @@ class Battler:
         except KeyError:
             self.trapped = False
 
+        # Team-preview and some edge protocol paths may call this before `active` is initialized.
+        # Seed `active` from request JSON so the rest of the update logic can proceed safely.
+        if self.active is None:
+            try:
+                active_dict = next(
+                    p
+                    for p in request_json[constants.SIDE][constants.POKEMON]
+                    if p.get(constants.ACTIVE)
+                )
+                self.active = Pokemon.from_switch_string(
+                    active_dict[constants.DETAILS],
+                    nickname=active_dict[constants.IDENT],
+                )
+            except StopIteration:
+                pass
+
         for index, pkmn_dict in enumerate(
             request_json[constants.SIDE][constants.POKEMON]
         ):
@@ -375,7 +391,7 @@ class Battler:
             pkmn_name = switch_string_pkmn.name
             pkmn_level = switch_string_pkmn.level
             pkmn_status = switch_string_pkmn.status
-            pkmn_nickname = self.active.extract_nickname_from_pokemonshowdown_string(
+            pkmn_nickname = Pokemon.extract_nickname_from_pokemonshowdown_string(
                 pkmn_dict[constants.IDENT]
             )
             if pkmn_dict[constants.ACTIVE]:

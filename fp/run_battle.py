@@ -122,9 +122,9 @@ async def handle_team_preview(battle, ps_websocket_client):
     battle_copy.opponent.active = Pokemon.get_dummy()
     battle_copy.team_preview = True
 
-    # Run async_pick_move using the live `battle`. `async_pick_move` clones internally
-    # for search, but returns a decision formatted against the live battle indexes.
-    best_move = await async_pick_move(battle)
+    # Use the preview copy here because the live battle may not have an active Pokemon yet.
+    # `async_pick_move` clones internally for search and formats against the battle it receives.
+    best_move = await async_pick_move(battle_copy)
 
     pkmn_name = battle.user.reserve[int(best_move[0].split()[1]) - 1].name
     battle.user.last_selected_move = LastUsedMove(
