@@ -112,7 +112,8 @@ async def async_pick_move(battle):
         best_move.removesuffix("-tera").removesuffix("-mega"),
         battle.turn,
     )
-    return format_decision(battle_copy, best_move)
+    # Format the decision using the live `battle` so switch indexes map to the actual team
+    return format_decision(battle, best_move)
 
 
 async def handle_team_preview(battle, ps_websocket_client):
@@ -121,9 +122,10 @@ async def handle_team_preview(battle, ps_websocket_client):
     battle_copy.opponent.active = Pokemon.get_dummy()
     battle_copy.team_preview = True
 
-    best_move = await async_pick_move(battle_copy)
+    # Run async_pick_move using the live `battle`. `async_pick_move` clones internally
+    # for search, but returns a decision formatted against the live battle indexes.
+    best_move = await async_pick_move(battle)
 
-    # because we copied the battle before sending it in, we need to update the last selected move here
     pkmn_name = battle.user.reserve[int(best_move[0].split()[1]) - 1].name
     battle.user.last_selected_move = LastUsedMove(
         "teampreview", "switch {}".format(pkmn_name), battle.turn
