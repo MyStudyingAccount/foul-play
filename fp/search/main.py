@@ -3,8 +3,11 @@ import random
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 
+import constants
+from data import all_move_json
 from constants import BattleType
 from fp.battle import Battle
+from fp.helpers import type_effectiveness_modifier
 from config import FoulPlayConfig
 from .standard_battles import prepare_battles
 from .random_battles import prepare_random_battles
@@ -14,6 +17,55 @@ from poke_engine import State as PokeEngineState, monte_carlo_tree_search, MctsR
 from fp.search.poke_engine_helpers import battle_to_poke_engine_state
 
 logger = logging.getLogger(__name__)
+
+
+def _max_incoming_effectiveness(attacker_moves, defender_types):
+    max_eff = 0
+    for mv in attacker_moves:
+        move_name = mv.name
+        if move_name not in all_move_json:
+            continue
+        move_data = all_move_json[move_name]
+        if move_data.get(constants.CATEGORY) not in constants.DAMAGING_CATEGORIES:
+            continue
+        move_type = move_data.get(constants.TYPE)
+        if not move_type:
+            continue
+        try:
+            eff = type_effectiveness_modifier(move_type, defender_types)
+        except Exception:
+            continue
+        max_eff = max(max_eff, eff)
+    return max_eff
+
+
+def _impostor_switch_multiplier(battle: Battle, target_pkmn):
+    opp = battle.opponent.active
+    user_active = battle.user.active
+    if opp is None or user_active is None:
+        return 1.0
+
+    opp_is_transformed = (
+        constants.TRANSFORM in opp.volatile_statuses
+        or (opp.original_ability or "").lower() == "impostor"
+    )
+    if not opp_is_transformed:
+        return 1.0
+
+    opp_moves = opp.moves or []
+    if len(opp_moves) == 0:
+        return 1.0
+
+    stay_eff = _max_incoming_effectiveness(opp_moves, user_active.types)
+    switch_eff = _max_incoming_effectiveness(opp_moves, target_pkmn.types)
+
+    if switch_eff == 0:
+        return 1.8
+    if stay_eff >= 2 and switch_eff <= 1:
+        return 1.6
+    if switch_eff < stay_eff:
+        return 1.35
+    return 1.0
 
 
 def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], battle: Battle) -> str:
@@ -54,6 +106,15 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                         )
                         if dangerous:
                             adjusted_score = adjusted_score * 1.5
+
+                    impostor_multiplier = _impostor_switch_multiplier(battle, target_pkmn)
+                    if impostor_multiplier > 1.0:
+                        logger.info(
+                            "Impostor/Transform switch boost: %s -> x%.2f",
+                            move_choice,
+                            impostor_multiplier,
+                        )
+                        adjusted_score = adjusted_score * impostor_multiplier
         except Exception:
             # be conservative on any unexpected error
             adjusted_score = score
