@@ -33,6 +33,36 @@ def _reserve_debug_snapshot(battle):
     return snapshot
 
 
+def _apply_request_json_if_possible(battle_obj):
+    if battle_obj.team_preview or not battle_obj.request_json:
+        return
+
+    # The request JSON can refer to either p1 or p2. Update the correct battler.
+    try:
+        side_id = battle_obj.request_json[constants.SIDE][constants.ID]
+    except Exception:
+        side_id = None
+
+    if side_id == battle_obj.user.name:
+        try:
+            battle_obj.user.update_from_request_json(battle_obj.request_json)
+        except ValueError:
+            logger.debug("User update_from_request_json raised ValueError; skipping")
+    elif side_id == battle_obj.opponent.name:
+        try:
+            battle_obj.opponent.update_from_request_json(battle_obj.request_json)
+        except ValueError:
+            logger.debug(
+                "Opponent update_from_request_json raised ValueError; skipping"
+            )
+    else:
+        # Fallback: try updating user, but ignore mismatches to avoid crashing the search.
+        try:
+            battle_obj.user.update_from_request_json(battle_obj.request_json)
+        except Exception:
+            logger.debug("Could not apply request_json; continuing without applying it")
+
+
 def _resolve_switch_slot(battle, switch_pokemon):
     matches = [
         pkmn
@@ -192,29 +222,7 @@ def extract_battle_factory_tier_from_msg(msg):
 
 async def async_pick_move(battle):
     battle_copy = deepcopy(battle)
-    if not battle_copy.team_preview and battle_copy.request_json:
-        # The request JSON can refer to either p1 or p2. Update the correct battler
-        try:
-            side_id = battle_copy.request_json[constants.SIDE][constants.ID]
-        except Exception:
-            side_id = None
-
-        if side_id == battle_copy.user.name:
-            try:
-                battle_copy.user.update_from_request_json(battle_copy.request_json)
-            except ValueError:
-                logger.debug("User update_from_request_json raised ValueError on copy; skipping")
-        elif side_id == battle_copy.opponent.name:
-            try:
-                battle_copy.opponent.update_from_request_json(battle_copy.request_json)
-            except ValueError:
-                logger.debug("Opponent update_from_request_json raised ValueError on copy; skipping")
-        else:
-            # fallback: try updating user, but ignore mismatches to avoid crashing the search
-            try:
-                battle_copy.user.update_from_request_json(battle_copy.request_json)
-            except Exception:
-                logger.debug("Could not apply request_json to copy; continuing without applying it")
+    _apply_request_json_if_possible(battle_copy)
 
     loop = asyncio.get_event_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -224,6 +232,11 @@ async def async_pick_move(battle):
         best_move.removesuffix("-tera").removesuffix("-mega"),
         battle.turn,
     )
+
+    # Keep live battle state in sync before formatting command against it.
+    # This avoids move list desyncs (e.g. Transform/Baton Pass turns).
+    _apply_request_json_if_possible(battle)
+
     # Format the decision using the live `battle` so switch indexes map to the actual team
     return format_decision(battle, best_move)
 
