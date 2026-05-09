@@ -150,9 +150,10 @@ def _resolve_move_message(battle, decision):
     chosen_move = battle.user.active.get_move(decision)
     if chosen_move is None:
         logger.debug(
-            "Could not resolve move '%s' on active '%s'; skipping z-move suffix",
+                "Could not resolve move '%s' on active '%s'; moves=%s; skipping z-move suffix",
             decision,
             battle.user.active.name,
+                [m.name for m in battle.user.active.moves],
         )
     elif chosen_move.can_z:
         message = "{} {}".format(message, constants.ZMOVE)
