@@ -91,7 +91,7 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
     for move_choice, score in final_policy.items():
         adjusted_score = score
         try:
-                if move_choice.startswith("switch "):
+            if move_choice.startswith("switch "):
                 target_raw = move_choice.split(" ", 1)[1].strip()
                 target_pkmn = None
 
