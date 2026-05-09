@@ -120,21 +120,39 @@ def _resolve_switch_slot(battle, switch_pokemon):
     else:
         chosen = matches[0]
 
-    # Find the reserve slot number: reserve[i] maps to slot (i+2)
-    try:
-        reserve_index = battle.user.reserve.index(chosen)
-        slot = reserve_index + 2  # slot 1 is active, slot 2+ are reserves
-    except ValueError:
+    # The chosen Pokemon must be in reserve (not active).
+    if chosen is battle.user.active:
         raise ValueError(
-            "Chosen Pokemon {} found in matches but not in reserve list".format(chosen.name)
+            "Switch target cannot be the active Pokemon. Target='{}' is active.".format(
+                switch_pokemon
+            )
+        )
+
+    # Determine the slot by matching against the latest request_json.
+    # Each pokemon object should have been assigned an index (1-6) by _apply_request_json_if_possible.
+    slot = getattr(chosen, "index", None)
+    
+    if slot is None:
+        raise ValueError(
+            "Chosen Pokemon {} has no index field. Cannot resolve to slot. "
+            "This may indicate battle state is out of sync with server.".format(
+                chosen.name
+            )
+        )
+    
+    if slot == 1:
+        raise ValueError(
+            "Resolved switch target to active Pokemon slot (slot=1). "
+            "Target='{}' index={}. This indicates battle state is corrupted.".format(
+                switch_pokemon, slot
+            )
         )
 
     logger.debug(
-        "Resolved switch '%s' -> slot %s (reserve index %s, request_index=%s)",
+        "Resolved switch '%s' -> slot %s (pkmn.index=%s)",
         switch_pokemon,
         slot,
-        reserve_index,
-        getattr(chosen, "index", None),
+        slot,
     )
     return "/switch {}".format(slot)
 
