@@ -64,6 +64,19 @@ def _apply_request_json_if_possible(battle_obj):
 
 
 def _resolve_switch_slot(battle, switch_pokemon):
+    """
+    Resolves a switch target name to a team slot number.
+    
+    In Pokémon Showdown, sending "/switch N" causes the server to swap slot 1 (active)
+    with slot N. Reserve slots are numbered 2-6:
+      - slot 1: active Pokemon
+      - slot 2: reserve[0]
+      - slot 3: reserve[1]
+      - ... 
+      - slot 6: reserve[5]
+    
+    This function finds the target Pokemon in the reserve list and returns its slot number.
+    """
     matches = [
         pkmn
         for pkmn in battle.user.reserve
@@ -72,94 +85,56 @@ def _resolve_switch_slot(battle, switch_pokemon):
         or (pkmn.nickname and normalize_name(pkmn.nickname) == switch_pokemon)
     ]
 
-    if len(matches) > 1:
-        logger.warning(
-            "Ambiguous switch target '%s' with duplicate species. Matches=%s",
-            switch_pokemon,
-            [
-                {
-                    "index": getattr(p, "index", None),
-                    "name": p.name,
-                    "nickname": p.nickname,
-                }
-                for p in matches
-            ],
-        )
-
     if not matches:
         raise ValueError(
-            "Tried to switch to: {} reserve_snapshot={}".format(
-                switch_pokemon, _reserve_debug_snapshot(battle)
+            "Could not find '{}' in reserves: {}".format(
+                switch_pokemon,
+                [p.name for p in battle.user.reserve]
             )
         )
 
-    # For duplicate species, prefer the healthier one (likely fresher).
-    # For non-duplicates, matches will have exactly one element.
+    # For duplicate species, prefer the one with the highest request_json index (most recently synced).
+    # If no index is available, prefer the healthier one (likely fresher).
     if len(matches) > 1:
         logger.warning(
-            "Ambiguous switch target '%s' with %d duplicates. Selecting by HP%%: %s",
+            "Ambiguous switch target '%s' - found %d matches in reserves",
             switch_pokemon,
             len(matches),
-            [
-                {
-                    "index": getattr(p, "index", None),
-                    "name": p.name,
-                    "nickname": p.nickname,
-                    "hp_pct": f"{100.0 * (p.hp or 0) / (p.max_hp or 1):.1f}%",
-                }
-                for p in matches
-            ],
         )
-        chosen = max(matches, key=lambda p: (p.hp or 0) / (p.max_hp or 1) if p.max_hp else 0)
+        matches_with_index = [m for m in matches if getattr(m, "index", None) is not None]
+        if matches_with_index:
+            chosen = max(matches_with_index, key=lambda p: getattr(p, "index", 0))
+            logger.debug(
+                "Selected by highest request index: %s (index=%s)",
+                chosen.name,
+                chosen.index,
+            )
+        else:
+            chosen = max(matches, key=lambda p: (p.hp or 0) / (p.max_hp or 1) if p.max_hp else 0)
+            logger.debug(
+                "Selected by highest HP%%: %s (hp=%s/%s)",
+                chosen.name,
+                chosen.hp,
+                chosen.max_hp,
+            )
     else:
         chosen = matches[0]
 
-    # Compute the actual team slot index to avoid sending an index that refers to the active Pokemon.
-    slot = None
+    # Find the reserve slot number: reserve[i] maps to slot (i+2)
     try:
-        full_team = [battle.user.active] + battle.user.reserve
-
-        # Prefer exact object identity in full_team.
-        for i, p in enumerate(full_team):
-            if p is chosen:
-                slot = i + 1
-                break
-
-        # If not found by identity, try matching by nickname/name in reserve.
-        if slot is None:
-            for i, p in enumerate(battle.user.reserve):
-                if p is chosen or (p.name == chosen.name and p.nickname == chosen.nickname):
-                    slot = i + 2  # reserve starts after active
-                    break
-    except Exception:
-        # fallback to stored index if we can't compute
-        slot = getattr(chosen, "index", None)
-
-    # If computed slot references the active Pokemon (slot == 1), try to recover.
-    if slot == 1:
-        logger.warning(
-            "Resolved switch slot refers to active (slot=1). Attempting recovery for %s",
-            chosen.name,
-        )
-        for i, p in enumerate(battle.user.reserve):
-            if p is chosen:
-                slot = i + 2
-                break
-
-    if slot is None or slot == 1:
+        reserve_index = battle.user.reserve.index(chosen)
+        slot = reserve_index + 2  # slot 1 is active, slot 2+ are reserves
+    except ValueError:
         raise ValueError(
-            "Could not resolve switch slot for {} reserve_snapshot={}".format(
-                switch_pokemon, _reserve_debug_snapshot(battle)
-            )
+            "Chosen Pokemon {} found in matches but not in reserve list".format(chosen.name)
         )
 
     logger.debug(
-        "Resolved switch decision '%s' -> slot=%s (stored_index=%s name=%s nickname=%s)",
+        "Resolved switch '%s' -> slot %s (reserve index %s, request_index=%s)",
         switch_pokemon,
         slot,
+        reserve_index,
         getattr(chosen, "index", None),
-        chosen.name,
-        chosen.nickname,
     )
     return "/switch {}".format(slot)
 
