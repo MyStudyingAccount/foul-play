@@ -93,14 +93,26 @@ def _resolve_switch_slot(battle, switch_pokemon):
             )
         )
 
-    # Prefer stable request slot index when available.
-    chosen = sorted(
-        matches,
-        key=lambda p: (
-            getattr(p, "index", None) is None,
-            getattr(p, "index", 999),
-        ),
-    )[0]
+    # For duplicate species, prefer the healthier one (likely fresher).
+    # For non-duplicates, matches will have exactly one element.
+    if len(matches) > 1:
+        logger.warning(
+            "Ambiguous switch target '%s' with %d duplicates. Selecting by HP%%: %s",
+            switch_pokemon,
+            len(matches),
+            [
+                {
+                    "index": getattr(p, "index", None),
+                    "name": p.name,
+                    "nickname": p.nickname,
+                    "hp_pct": f"{100.0 * (p.hp or 0) / (p.max_hp or 1):.1f}%",
+                }
+                for p in matches
+            ],
+        )
+        chosen = max(matches, key=lambda p: (p.hp or 0) / (p.max_hp or 1) if p.max_hp else 0)
+    else:
+        chosen = matches[0]
 
     # Compute the actual team slot index to avoid sending an index that refers to the active Pokemon.
     slot = None
@@ -238,7 +250,15 @@ async def async_pick_move(battle):
     _apply_request_json_if_possible(battle)
 
     # Format the decision using the live `battle` so switch indexes map to the actual team
-    return format_decision(battle, best_move)
+    result = format_decision(battle, best_move)
+    logger.debug(
+        "Sent command decision=%s -> formatted_result=%s active=%s reserve_snapshot=%s",
+        best_move,
+        result,
+        battle.user.active.name,
+        _reserve_debug_snapshot(battle),
+    )
+    return result
 
 
 async def handle_team_preview(battle, ps_websocket_client):

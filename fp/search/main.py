@@ -161,9 +161,9 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
     # Consider all moves that are close to the best move (after adjustment)
     highest_percentage = final_policy[0][1]
     final_policy = [i for i in final_policy if i[1] >= highest_percentage * 0.75]
-    logger.info("Considered Choices:")
+    logger.debug("Considered Choices:")
     for i, policy in enumerate(final_policy):
-        logger.info(f"\t{round(policy[1] * 100, 3)}%: {policy[0]}")
+        logger.debug(f"\t{round(policy[1] * 100, 3)}%: {policy[0]}")
 
     choice = random.choices(final_policy, weights=[p[1] for p in final_policy])[0]
     return choice[0]
@@ -246,8 +246,8 @@ def find_best_move(battle: Battle) -> str:
     else:
         raise ValueError("Unsupported battle type: {}".format(battle.battle_type))
 
-    logger.info("Searching for a move using MCTS...")
-    logger.info(
+    logger.debug("Searching for a move using MCTS...")
+    logger.debug(
         "Sampling {} battles at {}ms each".format(num_battles, search_time_per_battle)
     )
     with ProcessPoolExecutor(max_workers=FoulPlayConfig.parallelism) as executor:
@@ -263,5 +263,5 @@ def find_best_move(battle: Battle) -> str:
 
     mcts_results = [(fut.result(), chance, index) for (fut, chance, index) in futures]
     choice = select_move_from_mcts_results(mcts_results, battle)
-    logger.info("Choice: {}".format(choice))
+    logger.debug("Choice: {}".format(choice))
     return choice

@@ -49,7 +49,7 @@ def get_sets_file(cache_path: str, remote_url: str) -> dict:
     if os.path.exists(cache_path):
         with open(cache_path, "r") as f:
             sets = json.load(f)
-        logger.info(f"Loaded from cache: {cache_path}")
+        logger.debug(f"Loaded from cache: {cache_path}")
         return sets
 
     r = requests.get(remote_url)

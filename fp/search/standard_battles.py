@@ -451,11 +451,11 @@ def populate_standardbattle_unrevealed_pkmn(battle: Battle):
 
 def sample_mega_evolution(battler: Battler, index: int):
     if battler.mega_revealed():
-        logger.info("Mega evolution already revealed for {}".format(battler.name))
+        logger.debug("Mega evolution already revealed for {}".format(battler.name))
         return
     mega_formes = battler.possible_mega_evolutions()
     if not mega_formes:
-        logger.info("No possible mega evolutions for {}".format(battler.name))
+        logger.debug("No possible mega evolutions for {}".format(battler.name))
         return
     selected_mega = random.choice(list(mega_formes.keys()))
     mega_pkmn_name, mega_item = random.choice(mega_formes[selected_mega])
@@ -465,7 +465,7 @@ def sample_mega_evolution(battler: Battler, index: int):
     else:
         pkmn = battler.find_pokemon_in_reserves(selected_mega)
 
-    logger.info(
+    logger.debug(
         "Sampled mega evolution {}->{} with item {} for battle {}".format(
             selected_mega, mega_pkmn_name, mega_item, index
         )
@@ -477,7 +477,7 @@ def sample_mega_evolution(battler: Battler, index: int):
 def prepare_battles(battle: Battle, num_battles: int) -> list[(Battle, float)]:
     sampled_battles = []
     for index in range(num_battles):
-        logger.info("Sampling battle {}".format(index))
+        logger.debug("Sampling battle {}".format(index))
         battle_copy = deepcopy(battle)
         if battle_copy.mega_evolve_possible():
             sample_mega_evolution(battle_copy.opponent, index)

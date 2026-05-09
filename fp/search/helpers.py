@@ -29,7 +29,7 @@ def log_pkmn_set(pkmn: Pokemon, source=None):
     if source is not None:
         s += " source={}".format(source)
 
-    logger.info(s)
+    logger.debug(s)
 
 
 def populate_pkmn_from_set(

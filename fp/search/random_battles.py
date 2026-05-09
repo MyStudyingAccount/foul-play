@@ -43,7 +43,7 @@ def prepare_random_battles(battle: Battle, num_battles: int) -> list[(Battle, fl
 
     sampled_battles = []
     for index in range(num_battles):
-        logger.info("Sampling battle {}".format(index))
+        logger.debug("Sampling battle {}".format(index))
         battle_copy = deepcopy(battle)
 
         active = battle_copy.opponent.active
