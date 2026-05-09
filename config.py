@@ -10,7 +10,8 @@ from typing import Optional
 class CustomFormatter(logging.Formatter):
     def format(self, record):
         lvl = "{}".format(record.levelname)
-        return "{} {}".format(lvl.ljust(8), record.msg)
+        # Use getMessage() so logging placeholders like %s are interpolated.
+        return "{} {}".format(lvl.ljust(8), record.getMessage())
 
 
 class CustomRotatingFileHandler(RotatingFileHandler):
@@ -83,6 +84,7 @@ class _FoulPlayConfig:
     room_name: str
     log_level: str
     log_to_file: bool
+    detailed_debug: bool
     stdout_log_handler: logging.StreamHandler
     file_log_handler: Optional[CustomRotatingFileHandler]
 
@@ -159,6 +161,11 @@ class _FoulPlayConfig:
             action="store_true",
             help="When enabled, DEBUG logs will be written to a file in the logs/ directory",
         )
+        parser.add_argument(
+            "--detailed-debug",
+            action="store_true",
+            help="Enable very verbose debug logs (raw websocket payloads, including long messages)",
+        )
 
         args = parser.parse_args()
         self.websocket_uri = args.websocket_uri
@@ -178,6 +185,7 @@ class _FoulPlayConfig:
         self.room_name = args.room_name
         self.log_level = args.log_level
         self.log_to_file = args.log_to_file
+        self.detailed_debug = args.detailed_debug
 
         self.validate_config()
 

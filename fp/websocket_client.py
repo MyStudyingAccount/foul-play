@@ -6,7 +6,20 @@ import time
 
 import logging
 
+from config import FoulPlayConfig
+
 logger = logging.getLogger(__name__)
+
+
+def _message_preview(message, max_len=240):
+    if len(message) <= max_len:
+        return message
+    return message[:max_len] + "...(truncated)"
+
+
+def _is_very_verbose_payload(message):
+    # The `|formats|` payload and long packed messages can flood logs.
+    return "|formats|" in message or len(message) > 800
 
 
 class LoginError(Exception):
@@ -47,12 +60,30 @@ class PSWebsocketClient:
 
     async def receive_message(self):
         message = await self.websocket.recv()
-        logger.debug("Received message from websocket: {}".format(message))
+        if FoulPlayConfig.detailed_debug:
+            logger.debug("[detailed_debug] Received message from websocket: {}".format(message))
+        elif _is_very_verbose_payload(message):
+            logger.debug(
+                "Received message from websocket: <verbose payload omitted len=%s preview=%s>",
+                len(message),
+                _message_preview(message),
+            )
+        else:
+            logger.debug("Received message from websocket: {}".format(message))
         return message
 
     async def send_message(self, room, message_list):
         message = room + "|" + "|".join(message_list)
-        logger.debug("Sending message to websocket: {}".format(message))
+        if FoulPlayConfig.detailed_debug:
+            logger.debug("[detailed_debug] Sending message to websocket: {}".format(message))
+        elif _is_very_verbose_payload(message):
+            logger.debug(
+                "Sending message to websocket: <verbose payload omitted len=%s preview=%s>",
+                len(message),
+                _message_preview(message),
+            )
+        else:
+            logger.debug("Sending message to websocket: {}".format(message))
         await self.websocket.send(message)
         self.last_message = message
 

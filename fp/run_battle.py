@@ -69,11 +69,56 @@ def format_decision(battle, decision):
                     getattr(p, "index", 999),
                 ),
             )[0]
-            message = "/switch {}".format(chosen.index)
+            # Compute the actual team slot index to avoid sending an index that refers to the active PKMN.
+            try:
+                full_team = [battle.user.active] + battle.user.reserve
+                slot = None
+                # Prefer exact object identity in full_team
+                for i, p in enumerate(full_team):
+                    if p is chosen:
+                        slot = i + 1
+                        break
+
+                # If not found by identity, try matching by nickname/name in reserve
+                if slot is None:
+                    for i, p in enumerate(battle.user.reserve):
+                        if p is chosen or (
+                            p.name == chosen.name and p.nickname == chosen.nickname
+                        ):
+                            slot = i + 2  # reserve starts after active
+                            break
+
+            except Exception:
+                # fallback to stored index if we can't compute
+                slot = getattr(chosen, "index", None)
+
+            # If computed slot references the active pokemon (slot == 1), try to recover
+            if slot == 1:
+                logger.warning(
+                    "Resolved switch slot refers to active (slot=1). Attempting recovery for %s",
+                    chosen.name,
+                )
+                recovered = None
+                for i, p in enumerate(battle.user.reserve):
+                    if p is chosen:
+                        recovered = i + 2
+                        break
+                if recovered is not None:
+                    slot = recovered
+
+            if slot is None or slot == 1:
+                raise ValueError(
+                    "Could not resolve switch slot for {} reserve_snapshot={}".format(
+                        switch_pokemon, _reserve_debug_snapshot(battle)
+                    )
+                )
+
+            message = "/switch {}".format(slot)
             logger.debug(
-                "Resolved switch decision '%s' -> index=%s (name=%s nickname=%s)",
+                "Resolved switch decision '%s' -> slot=%s (stored_index=%s name=%s nickname=%s)",
                 decision,
-                chosen.index,
+                slot,
+                getattr(chosen, "index", None),
                 chosen.name,
                 chosen.nickname,
             )
