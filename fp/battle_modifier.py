@@ -531,6 +531,19 @@ def switch_or_drag(battle, split_msg, switch_or_drag="switch"):
 
     side.active = pkmn
 
+    # Log indices state for debugging index stability during the battle
+    try:
+        reserve_indices = [getattr(r, "index", None) for r in side.reserve]
+        logger.debug(
+            "%s active set to %s (index=%s); reserve indices=%s",
+            side_name,
+            side.active.name,
+            getattr(side.active, "index", None),
+            reserve_indices,
+        )
+    except Exception:
+        logger.debug("%s active set to %s (index unknown)", side_name, side.active.name)
+
     # zacian-crowned is technically still zacian before switching in for the first time
     # this is handled by set-prediction for the opponent, but for the bot's pkmn we
     # need to re-apply the stats that the P.S. server sends us because prior to the first

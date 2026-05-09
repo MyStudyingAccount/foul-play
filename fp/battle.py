@@ -425,6 +425,12 @@ class Battler:
                         pkmn.add_move(move_name)
 
             pkmn.index = request_pkmn_index
+            logger.debug(
+                "Set index for %s -> %s (from request slot %s)",
+                pkmn.name,
+                pkmn.index,
+                request_pkmn_index,
+            )
             pkmn.level = pkmn_level
             pkmn.status = pkmn_status
             pkmn.nickname = pkmn_nickname
@@ -489,6 +495,11 @@ class Battler:
 
             pkmn.ability = pkmn_dict[constants.REQUEST_DICT_ABILITY]
             pkmn.index = index + 1
+            logger.debug(
+                "Initial first-turn index for %s -> %s",
+                pkmn.name,
+                pkmn.index,
+            )
             pkmn.reviving = pkmn_dict.get(constants.REVIVING, False)
             pkmn.hp, pkmn.max_hp, pkmn.status = get_pokemon_info_from_condition(
                 pkmn_dict[constants.CONDITION]
