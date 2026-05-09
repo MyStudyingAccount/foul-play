@@ -85,6 +85,7 @@ class _FoulPlayConfig:
     log_level: str
     log_to_file: bool
     detailed_debug: bool
+    damage_debug: bool
     stdout_log_handler: logging.StreamHandler
     file_log_handler: Optional[CustomRotatingFileHandler]
 
@@ -166,6 +167,11 @@ class _FoulPlayConfig:
             action="store_true",
             help="Enable very verbose debug logs (raw websocket payloads, including long messages)",
         )
+        parser.add_argument(
+            "--damage-debug",
+            action="store_true",
+            help="Enable very verbose damage-calculation debug logs",
+        )
 
         args = parser.parse_args()
         self.websocket_uri = args.websocket_uri
@@ -186,6 +192,7 @@ class _FoulPlayConfig:
         self.log_level = args.log_level
         self.log_to_file = args.log_to_file
         self.detailed_debug = args.detailed_debug
+        self.damage_debug = args.damage_debug
 
         self.validate_config()
 

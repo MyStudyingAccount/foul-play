@@ -2,6 +2,7 @@ import logging
 import importlib
 
 import constants
+from config import FoulPlayConfig
 from data import pokedex, all_move_json
 from fp.battle import Battle, Pokemon, Battler, LastUsedMove
 from fp.helpers import normalize_name
@@ -381,14 +382,15 @@ def poke_engine_get_damage_rolls(
 
     state = battle_to_poke_engine_state(battle)
 
-    logger.debug(
-        "Calling calculate damage with state: {}, m1: {}, m2: {}, s1_went_first: {}".format(
-            state.to_string(),
-            side_one_move,
-            side_two_move,
-            side_one_went_first,
+    if FoulPlayConfig.damage_debug:
+        logger.debug(
+            "Calling calculate damage with state: {}, m1: {}, m2: {}, s1_went_first: {}".format(
+                state.to_string(),
+                side_one_move,
+                side_two_move,
+                side_one_went_first,
+            )
         )
-    )
 
     s1_rolls, s2_rolls = calculate_damage(
         state,
@@ -397,12 +399,13 @@ def poke_engine_get_damage_rolls(
         side_one_went_first,
     )
 
-    logger.debug(
-        "Got Rolls s1_rolls: {}, s2_rolls: {}".format(
-            s1_rolls,
-            s2_rolls,
+    if FoulPlayConfig.damage_debug:
+        logger.debug(
+            "Got Rolls s1_rolls: {}, s2_rolls: {}".format(
+                s1_rolls,
+                s2_rolls,
+            )
         )
-    )
 
     return s1_rolls, s2_rolls
 
