@@ -33,128 +33,142 @@ def _reserve_debug_snapshot(battle):
     return snapshot
 
 
+def _resolve_switch_slot(battle, switch_pokemon):
+    matches = [
+        pkmn
+        for pkmn in battle.user.reserve
+        if pkmn.name == switch_pokemon
+        or pkmn.base_name == switch_pokemon
+        or (pkmn.nickname and normalize_name(pkmn.nickname) == switch_pokemon)
+    ]
+
+    if len(matches) > 1:
+        logger.warning(
+            "Ambiguous switch target '%s' with duplicate species. Matches=%s",
+            switch_pokemon,
+            [
+                {
+                    "index": getattr(p, "index", None),
+                    "name": p.name,
+                    "nickname": p.nickname,
+                }
+                for p in matches
+            ],
+        )
+
+    if not matches:
+        raise ValueError(
+            "Tried to switch to: {} reserve_snapshot={}".format(
+                switch_pokemon, _reserve_debug_snapshot(battle)
+            )
+        )
+
+    # Prefer stable request slot index when available.
+    chosen = sorted(
+        matches,
+        key=lambda p: (
+            getattr(p, "index", None) is None,
+            getattr(p, "index", 999),
+        ),
+    )[0]
+
+    # Compute the actual team slot index to avoid sending an index that refers to the active Pokemon.
+    slot = None
+    try:
+        full_team = [battle.user.active] + battle.user.reserve
+
+        # Prefer exact object identity in full_team.
+        for i, p in enumerate(full_team):
+            if p is chosen:
+                slot = i + 1
+                break
+
+        # If not found by identity, try matching by nickname/name in reserve.
+        if slot is None:
+            for i, p in enumerate(battle.user.reserve):
+                if p is chosen or (p.name == chosen.name and p.nickname == chosen.nickname):
+                    slot = i + 2  # reserve starts after active
+                    break
+    except Exception:
+        # fallback to stored index if we can't compute
+        slot = getattr(chosen, "index", None)
+
+    # If computed slot references the active Pokemon (slot == 1), try to recover.
+    if slot == 1:
+        logger.warning(
+            "Resolved switch slot refers to active (slot=1). Attempting recovery for %s",
+            chosen.name,
+        )
+        for i, p in enumerate(battle.user.reserve):
+            if p is chosen:
+                slot = i + 2
+                break
+
+    if slot is None or slot == 1:
+        raise ValueError(
+            "Could not resolve switch slot for {} reserve_snapshot={}".format(
+                switch_pokemon, _reserve_debug_snapshot(battle)
+            )
+        )
+
+    logger.debug(
+        "Resolved switch decision '%s' -> slot=%s (stored_index=%s name=%s nickname=%s)",
+        switch_pokemon,
+        slot,
+        getattr(chosen, "index", None),
+        chosen.name,
+        chosen.nickname,
+    )
+    return "/switch {}".format(slot)
+
+
+def _resolve_move_message(battle, decision):
+    tera = False
+    mega = False
+
+    if decision.endswith("-tera"):
+        decision = decision.removesuffix("-tera")
+        tera = True
+    elif decision.endswith("-mega"):
+        decision = decision.removesuffix("-mega")
+        mega = True
+
+    message = "/choose move {}".format(decision)
+
+    if battle.user.active.can_mega_evo and mega:
+        message = "{} {}".format(message, constants.MEGA)
+    elif battle.user.active.can_ultra_burst:
+        message = "{} {}".format(message, constants.ULTRA_BURST)
+
+    # only dynamax on last pokemon
+    if battle.user.active.can_dynamax and all(p.hp == 0 for p in battle.user.reserve):
+        message = "{} {}".format(message, constants.DYNAMAX)
+
+    if tera and battle.generation == "gen9":
+        message = "{} {}".format(message, constants.TERASTALLIZE)
+
+    chosen_move = battle.user.active.get_move(decision)
+    if chosen_move is None:
+        logger.debug(
+            "Could not resolve move '%s' on active '%s'; skipping z-move suffix",
+            decision,
+            battle.user.active.name,
+        )
+    elif chosen_move.can_z:
+        message = "{} {}".format(message, constants.ZMOVE)
+
+    return message
+
+
 def format_decision(battle, decision):
     # Formats a decision for communication with Pokemon-Showdown
     # If the move can be used as a Z-Move, it will be
 
     if decision.startswith(constants.SWITCH_STRING + " "):
-        switch_pokemon = decision.split("switch ")[-1]
-        matches = [
-            pkmn
-            for pkmn in battle.user.reserve
-            if pkmn.name == switch_pokemon
-            or pkmn.base_name == switch_pokemon
-            or (pkmn.nickname and normalize_name(pkmn.nickname) == switch_pokemon)
-        ]
-        if len(matches) > 1:
-            logger.warning(
-                "Ambiguous switch target '%s' with duplicate species. Matches=%s",
-                switch_pokemon,
-                [
-                    {
-                        "index": getattr(p, "index", None),
-                        "name": p.name,
-                        "nickname": p.nickname,
-                    }
-                    for p in matches
-                ],
-            )
-
-        if matches:
-            # Prefer stable request slot index when available.
-            chosen = sorted(
-                matches,
-                key=lambda p: (
-                    getattr(p, "index", None) is None,
-                    getattr(p, "index", 999),
-                ),
-            )[0]
-            # Compute the actual team slot index to avoid sending an index that refers to the active PKMN.
-            try:
-                full_team = [battle.user.active] + battle.user.reserve
-                slot = None
-                # Prefer exact object identity in full_team
-                for i, p in enumerate(full_team):
-                    if p is chosen:
-                        slot = i + 1
-                        break
-
-                # If not found by identity, try matching by nickname/name in reserve
-                if slot is None:
-                    for i, p in enumerate(battle.user.reserve):
-                        if p is chosen or (
-                            p.name == chosen.name and p.nickname == chosen.nickname
-                        ):
-                            slot = i + 2  # reserve starts after active
-                            break
-
-            except Exception:
-                # fallback to stored index if we can't compute
-                slot = getattr(chosen, "index", None)
-
-            # If computed slot references the active pokemon (slot == 1), try to recover
-            if slot == 1:
-                logger.warning(
-                    "Resolved switch slot refers to active (slot=1). Attempting recovery for %s",
-                    chosen.name,
-                )
-                recovered = None
-                for i, p in enumerate(battle.user.reserve):
-                    if p is chosen:
-                        recovered = i + 2
-                        break
-                if recovered is not None:
-                    slot = recovered
-
-            if slot is None or slot == 1:
-                raise ValueError(
-                    "Could not resolve switch slot for {} reserve_snapshot={}".format(
-                        switch_pokemon, _reserve_debug_snapshot(battle)
-                    )
-                )
-
-            message = "/switch {}".format(slot)
-            logger.debug(
-                "Resolved switch decision '%s' -> slot=%s (stored_index=%s name=%s nickname=%s)",
-                decision,
-                slot,
-                getattr(chosen, "index", None),
-                chosen.name,
-                chosen.nickname,
-            )
-        else:
-            raise ValueError(
-                "Tried to switch to: {} reserve_snapshot={}".format(
-                    switch_pokemon, _reserve_debug_snapshot(battle)
-                )
-            )
+        switch_pokemon = decision.split("switch ", 1)[1].strip()
+        message = _resolve_switch_slot(battle, switch_pokemon)
     else:
-        tera = False
-        mega = False
-        if decision.endswith("-tera"):
-            decision = decision.replace("-tera", "")
-            tera = True
-        elif decision.endswith("-mega"):
-            decision = decision.replace("-mega", "")
-            mega = True
-        message = "/choose move {}".format(decision)
-
-        if battle.user.active.can_mega_evo and mega:
-            message = "{} {}".format(message, constants.MEGA)
-        elif battle.user.active.can_ultra_burst:
-            message = "{} {}".format(message, constants.ULTRA_BURST)
-
-        # only dynamax on last pokemon
-        if battle.user.active.can_dynamax and all(
-            p.hp == 0 for p in battle.user.reserve
-        ):
-            message = "{} {}".format(message, constants.DYNAMAX)
-
-        if tera and battle.generation == "gen9":
-            message = "{} {}".format(message, constants.TERASTALLIZE)
-
-        if battle.user.active.get_move(decision).can_z:
-            message = "{} {}".format(message, constants.ZMOVE)
+        message = _resolve_move_message(battle, decision)
 
     return [message, str(battle.rqid)]
 
