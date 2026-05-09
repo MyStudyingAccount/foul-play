@@ -6,7 +6,7 @@ from copy import deepcopy
 import constants
 from data import all_move_json
 from constants import BattleType
-from fp.battle import Battle
+from fp.battle import Battle, Pokemon
 from fp.helpers import type_effectiveness_modifier
 from config import FoulPlayConfig
 from .standard_battles import prepare_battles
@@ -91,10 +91,34 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
     for move_choice, score in final_policy.items():
         adjusted_score = score
         try:
-            if move_choice.startswith("switch "):
-                target_name = move_choice.split(" ", 1)[1].strip()
-                # try to find reserve pokemon by name
-                target_pkmn = battle.user.find_pokemon_in_reserves(target_name)
+                if move_choice.startswith("switch "):
+                target_raw = move_choice.split(" ", 1)[1].strip()
+                target_pkmn = None
+
+                # If the engine returned a numeric slot (e.g., "switch 2"), try by index
+                if target_raw.isdigit():
+                    try:
+                        idx = int(target_raw)
+                        target_pkmn = battle.user.find_reserve_pokemon_by_index(idx)
+                    except Exception:
+                        target_pkmn = None
+
+                # If it's a PS-style slot or nickname (e.g., "p1a: Nickname"), extract nickname
+                if target_pkmn is None and ":" in target_raw:
+                    try:
+                        nickname = Pokemon.extract_nickname_from_pokemonshowdown_string(
+                            target_raw
+                        )
+                        target_pkmn = battle.user.find_reserve_pokemon_by_nickname(nickname)
+                    except Exception:
+                        target_pkmn = None
+
+                # Fallbacks: by nickname or species/base_name
+                if target_pkmn is None:
+                    target_pkmn = battle.user.find_reserve_pokemon_by_nickname(target_raw)
+                if target_pkmn is None:
+                    target_pkmn = battle.user.find_pokemon_in_reserves(target_raw)
+
                 if target_pkmn is not None:
                     ability = (target_pkmn.ability or "").lower()
                     # boost switches into Magic Bounce users when opponent can use status/hazard moves
@@ -109,11 +133,23 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
 
                     impostor_multiplier = _impostor_switch_multiplier(battle, target_pkmn)
                     if impostor_multiplier > 1.0:
-                        logger.info(
-                            "Impostor/Transform switch boost: %s -> x%.2f",
-                            move_choice,
-                            impostor_multiplier,
-                        )
+                        try:
+                            opp_moves = battle.opponent.active.moves or []
+                            stay_eff = _max_incoming_effectiveness(opp_moves, battle.user.active.types)
+                            switch_eff = _max_incoming_effectiveness(opp_moves, target_pkmn.types)
+                            logger.info(
+                                "Impostor/Transform switch boost: %s -> x%.2f (stay_eff=%.2f switch_eff=%.2f)",
+                                move_choice,
+                                impostor_multiplier,
+                                stay_eff,
+                                switch_eff,
+                            )
+                        except Exception:
+                            logger.info(
+                                "Impostor/Transform switch boost: %s -> x%.2f",
+                                move_choice,
+                                impostor_multiplier,
+                            )
                         adjusted_score = adjusted_score * impostor_multiplier
         except Exception:
             # be conservative on any unexpected error
