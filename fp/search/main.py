@@ -190,6 +190,70 @@ def _weather_strategy_multiplier(battle: Battle, move_choice: str) -> float:
     return 1.0
 
 
+def _weather_synergy_multiplier_for_pokemon(pkmn: Pokemon, desired_weather: str) -> float:
+    ability = (pkmn.ability or "").lower()
+    move_names = {m.name for m in (pkmn.moves or [])}
+
+    synergy = 0
+
+    if desired_weather == constants.SUN:
+        if ability in {"chlorophyll", "solarpower", "protosynthesis"}:
+            synergy += 2
+        if {"solarbeam", "solarblade", "weatherball", "growth"} & move_names:
+            synergy += 1
+    elif desired_weather in (constants.RAIN, constants.HEAVY_RAIN):
+        if ability in {"swiftswim", "raindish", "hydration", "protosynthesis"}:
+            synergy += 2
+        if {"thunder", "hurricane", "weatherball", "surf", "hydropump", "weatherball"} & move_names:
+            synergy += 1
+    elif desired_weather == constants.SAND:
+        if ability in {"sandrush", "sandforce", "sandveil", "sandspit"}:
+            synergy += 2
+        if {"weatherball", "earthquake", "rockslide", "stoneedge", "sandstorm"} & move_names:
+            synergy += 1
+    elif desired_weather in constants.HAIL_OR_SNOW:
+        if ability in {"slushrush", "icebody", "snowcloak"}:
+            synergy += 2
+        if {"blizzard", "weatherball", "auroraveil", "icebeam"} & move_names:
+            synergy += 1
+
+    if synergy == 0:
+        return 1.0
+
+    return 1.0 + min(0.30, 0.08 * synergy)
+
+
+def _weather_team_synergy_multiplier(battle: Battle, move_choice: str) -> float:
+    move_name = _decision_move_name(move_choice)
+    desired_weather = None
+
+    match move_name:
+        case "sunnyday":
+            desired_weather = constants.SUN
+        case "raindance":
+            desired_weather = constants.RAIN
+        case "sandstorm":
+            desired_weather = constants.SAND
+        case "snowscape":
+            desired_weather = constants.SNOW
+        case _:
+            return 1.0
+
+    allies = [battle.user.active] + list(battle.user.reserve)
+    allies = [pkmn for pkmn in allies if pkmn is not None and pkmn.hp > 0]
+
+    synergy_multiplier = 1.0
+    for ally in allies:
+        synergy_multiplier = max(
+            synergy_multiplier,
+            _weather_synergy_multiplier_for_pokemon(ally, desired_weather),
+        )
+
+    # Even if we do not have many obvious weather abusers yet, keep the boost small but real
+    # so weather setters are still considered when the team looks like it may care about weather.
+    return synergy_multiplier
+
+
 def _decision_move_name(move_choice: str) -> str:
     return move_choice.lower().removesuffix("-tera").removesuffix("-mega")
 
@@ -361,6 +425,17 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                     move_choice,
                     battle.weather_turns_remaining,
                     weather_strategy_multiplier,
+                    round(score, 3),
+                    round(adjusted_score, 3),
+                )
+
+            weather_team_synergy_multiplier = _weather_team_synergy_multiplier(battle, move_choice)
+            if weather_team_synergy_multiplier != 1.0:
+                adjusted_score = adjusted_score * weather_team_synergy_multiplier
+                logger.info(
+                    "Weather team synergy boost: move=%s multiplier=%.2f score: %s -> %s",
+                    move_choice,
+                    weather_team_synergy_multiplier,
                     round(score, 3),
                     round(adjusted_score, 3),
                 )

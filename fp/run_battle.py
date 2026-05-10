@@ -470,7 +470,10 @@ async def start_battle(ps_websocket_client, pokemon_battle_type, team_dict):
         )
 
     await ps_websocket_client.send_message(battle.battle_tag, ["Hi! I am a bot, have fun and good luck!"])
-    await ps_websocket_client.send_message(battle.battle_tag, ["/timer on"])
+    if FoulPlayConfig.battle_timer_enabled:
+        await ps_websocket_client.send_message(battle.battle_tag, ["/timer on"])
+    else:
+        await ps_websocket_client.send_message(battle.battle_tag, ["/timer off"])
 
     return battle
 

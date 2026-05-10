@@ -157,8 +157,11 @@ Core improvements integrated from [Agetian/showdown-battlebot](https://github.co
 - Hazard stacking prevention
 - Weather-aware move and switch heuristics
 - Weather maintenance strategy heuristics
+- Team synergy weighting for weather setters
 - Status-aware move and switch heuristics
 - Enhanced generation-specific logic
 - Trick Room state awareness
 
-Base project: [pmariglia/foul-play](https://github.com/pmariglia/foul-play)
+Upstream project: [pmariglia/foul-play](https://github.com/pmariglia/foul-play) (GPLv3)
+
+Directly copied or adapted upstream code should retain its original notices and license terms.
