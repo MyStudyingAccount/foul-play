@@ -1,7 +1,7 @@
-# Foul Play ![umbreon](https://play.pokemonshowdown.com/sprites/xyani/umbreon.gif)
+# Beat Up ![umbreon](https://play.pokemonshowdown.com/sprites/xyani/umbreon.gif)
 A Pokémon battle-bot that can play battles on [Pokemon Showdown](https://pokemonshowdown.com/).
 
-Foul Play can play single battles in all generations
+Beat Up can play single battles in all generations
 though currently dynamax and z-moves are not supported.
 
 ![badge](https://github.com/pmariglia/foul-play/actions/workflows/ci.yml/badge.svg)
@@ -21,7 +21,7 @@ use `python run.py --help` to see all options.
 
 **1. Clone**
 
-Clone the repository with `git clone https://github.com/pmariglia/foul-play.git`
+Clone the repository with `git clone https://github.com/MyStudyingAccount/beat-up.git`
 
 **2. Install Requirements**
 
@@ -47,7 +47,7 @@ python run.py \
 
 **1. Clone the repository**
 
-`git clone https://github.com/pmariglia/foul-play.git`
+`git clone https://github.com/MyStudyingAccount/beat-up.git`
 
 **2. Build the Docker image**
 
@@ -63,7 +63,7 @@ make docker GEN=gen4
 
 **3. Run the Docker Image**
 ```bash
-docker run --rm --network host foul-play:latest \
+docker run --rm --network host beat-up:latest \
 --websocket-uri wss://sim3.psim.us/showdown/websocket \
 --ps-username 'My Username' \
 --ps-password sekret \
