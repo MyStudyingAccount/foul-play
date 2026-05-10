@@ -114,6 +114,153 @@ def _impostor_switch_multiplier(battle: Battle, target_pkmn):
     return 1.0
 
 
+def _weather_move_multiplier(battle: Battle, move_choice: str) -> float:
+    move_name = move_choice.lower()
+    weather = battle.weather
+
+    if weather is None:
+        return 1.0
+
+    if move_name == "weatherball":
+        return 1.25
+
+    if weather in (constants.RAIN, constants.HEAVY_RAIN):
+        if move_name in ("thunder", "hurricane"):
+            return 1.2
+        if move_name in ("solarbeam", "solarblade"):
+            return 0.6
+    elif weather == constants.SUN:
+        if move_name in ("solarbeam", "solarblade"):
+            return 1.2
+        if move_name in ("thunder", "hurricane"):
+            return 0.6
+    elif weather == constants.SAND:
+        if move_name == "weatherball":
+            return 1.15
+    elif weather in constants.HAIL_OR_SNOW:
+        if move_name == "blizzard":
+            return 1.2
+        if move_name == "weatherball":
+            return 1.15
+
+    return 1.0
+
+
+def _weather_switch_multiplier(battle: Battle, target_pkmn) -> float:
+    ability = (target_pkmn.ability or "").lower()
+    if ability == "drizzle":
+        desired_weather = constants.RAIN
+    elif ability == "drought":
+        desired_weather = constants.SUN
+    elif ability == "sandstream":
+        desired_weather = constants.SAND
+    elif ability == "snowwarning":
+        desired_weather = constants.SNOW
+    elif ability == "primordialsea":
+        desired_weather = constants.HEAVY_RAIN
+    elif ability == "desolateland":
+        desired_weather = constants.SUN
+    else:
+        return 1.0
+
+    if battle.weather != desired_weather or battle.weather_turns_remaining <= 2:
+        return 1.18
+
+    return 1.0
+
+
+def _decision_move_name(move_choice: str) -> str:
+    return move_choice.lower().removesuffix("-tera").removesuffix("-mega")
+
+
+def _move_data_for_choice(move_choice: str):
+    move_name = _decision_move_name(move_choice)
+    return all_move_json.get(move_name)
+
+
+def _status_move_multiplier(battle: Battle, move_choice: str) -> float:
+    if move_choice.startswith("switch "):
+        return 1.0
+
+    move_data = _move_data_for_choice(move_choice)
+    if move_data is None:
+        return 1.0
+
+    move_name = _decision_move_name(move_choice)
+    move_category = move_data.get(constants.CATEGORY)
+    user_status = battle.user.active.status
+    opponent_status = battle.opponent.active.status if battle.opponent.active else None
+    user_ability = (battle.user.active.ability or "").lower()
+
+    multiplier = 1.0
+
+    if user_status == constants.SLEEP:
+        if move_name == "sleeptalk":
+            multiplier *= 1.8
+        elif move_name == "rest":
+            multiplier *= 1.2
+        else:
+            multiplier *= 0.2
+
+    elif user_status == constants.BURN:
+        if move_name == "facade":
+            multiplier *= 1.6
+        elif move_category == constants.PHYSICAL:
+            multiplier *= 0.72
+            if user_ability == "guts":
+                multiplier *= 1.35
+
+    elif user_status in (constants.POISON, constants.TOXIC):
+        if move_name == "facade":
+            multiplier *= 1.45
+        elif move_category == constants.PHYSICAL and user_ability == "guts":
+            multiplier *= 1.2
+
+    elif user_status == constants.PARALYZED and move_category == constants.PHYSICAL:
+        multiplier *= 0.95
+
+    if opponent_status is not None:
+        if move_name == "hex" and opponent_status in (
+            constants.SLEEP,
+            constants.BURN,
+            constants.POISON,
+            constants.TOXIC,
+            constants.PARALYZED,
+        ):
+            multiplier *= 1.35
+        elif move_name == "venoshock" and opponent_status in (
+            constants.POISON,
+            constants.TOXIC,
+        ):
+            multiplier *= 1.35
+        elif move_name == "dreameater" and opponent_status == constants.SLEEP:
+            multiplier *= 1.35
+
+    return multiplier
+
+
+def _status_switch_multiplier(battle: Battle, target_pkmn) -> float:
+    user_status = battle.user.active.status
+    target_status = target_pkmn.status
+    target_ability = (target_pkmn.ability or "").lower()
+
+    multiplier = 1.0
+
+    if user_status in (constants.BURN, constants.POISON, constants.TOXIC, constants.PARALYZED):
+        if target_ability in ("naturalcure", "regenerator", "magicguard"):
+            multiplier *= 1.12
+        if target_ability == "guts" and user_status in (constants.BURN, constants.POISON, constants.TOXIC):
+            multiplier *= 1.15
+
+    if user_status == constants.SLEEP and target_ability in ("naturalcure", "regenerator"):
+        multiplier *= 1.15
+
+    if target_status is not None and target_ability in ("guts", "marvelscale", "poisonheal", "quickfeet"):
+        multiplier *= 1.15
+
+    return multiplier
+
+
 def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], battle: Battle) -> str:
     final_policy = {}
     for mcts_result, sample_chance, index in mcts_results:
@@ -158,6 +305,31 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                             sleep_count, penalty, round(score, 3), round(adjusted_score, 3)
                         )
                     )
+
+            weather_multiplier = _weather_move_multiplier(battle, move_choice)
+            if weather_multiplier != 1.0:
+                adjusted_score = adjusted_score * weather_multiplier
+                logger.info(
+                    "Weather move boost: weather=%s move=%s multiplier=%.2f score: %s -> %s",
+                    battle.weather,
+                    move_choice,
+                    weather_multiplier,
+                    round(score, 3),
+                    round(adjusted_score, 3),
+                )
+
+            status_multiplier = _status_move_multiplier(battle, move_choice)
+            if status_multiplier != 1.0:
+                adjusted_score = adjusted_score * status_multiplier
+                logger.info(
+                    "Status move boost: user_status=%s opponent_status=%s move=%s multiplier=%.2f score: %s -> %s",
+                    battle.user.active.status,
+                    battle.opponent.active.status if battle.opponent.active else None,
+                    move_choice,
+                    status_multiplier,
+                    round(score, 3),
+                    round(adjusted_score, 3),
+                )
             
             # Penalize hazard moves when hazards are already at max layers on opponent's side
             hazard_move_mapping = {
@@ -242,6 +414,28 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                                 impostor_multiplier,
                             )
                         adjusted_score = adjusted_score * impostor_multiplier
+
+                    weather_switch_multiplier = _weather_switch_multiplier(battle, target_pkmn)
+                    if weather_switch_multiplier != 1.0:
+                        adjusted_score = adjusted_score * weather_switch_multiplier
+                        logger.info(
+                            "Weather setter switch boost: %s ability=%s weather=%s multiplier=%.2f",
+                            move_choice,
+                            ability,
+                            battle.weather,
+                            weather_switch_multiplier,
+                        )
+
+                    status_switch_multiplier = _status_switch_multiplier(battle, target_pkmn)
+                    if status_switch_multiplier != 1.0:
+                        adjusted_score = adjusted_score * status_switch_multiplier
+                        logger.info(
+                            "Status switch boost: %s target_status=%s ability=%s multiplier=%.2f",
+                            move_choice,
+                            target_pkmn.status,
+                            ability,
+                            status_switch_multiplier,
+                        )
 
         except Exception:
             # be conservative on any unexpected error
