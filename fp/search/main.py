@@ -169,6 +169,27 @@ def _weather_switch_multiplier(battle: Battle, target_pkmn) -> float:
     return 1.0
 
 
+def _weather_strategy_multiplier(battle: Battle, move_choice: str) -> float:
+    move_name = _decision_move_name(move_choice)
+    weather = battle.weather
+    turns_remaining = battle.weather_turns_remaining
+
+    if move_name in ("sunnyday", "raindance", "sandstorm", "snowscape"):
+        if weather is None or weather == "none":
+            return 1.35
+        if turns_remaining >= 0 and turns_remaining <= 2:
+            return 1.45
+        if move_name == weather:
+            return 0.7
+        return 1.1
+
+    if weather is not None and turns_remaining >= 0 and turns_remaining <= 2:
+        if move_name in ("hurricane", "thunder", "weatherball", "blizzard", "solarbeam", "solarblade"):
+            return 1.12
+
+    return 1.0
+
+
 def _decision_move_name(move_choice: str) -> str:
     return move_choice.lower().removesuffix("-tera").removesuffix("-mega")
 
@@ -327,6 +348,19 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                     battle.opponent.active.status if battle.opponent.active else None,
                     move_choice,
                     status_multiplier,
+                    round(score, 3),
+                    round(adjusted_score, 3),
+                )
+
+            weather_strategy_multiplier = _weather_strategy_multiplier(battle, move_choice)
+            if weather_strategy_multiplier != 1.0:
+                adjusted_score = adjusted_score * weather_strategy_multiplier
+                logger.info(
+                    "Weather strategy boost: weather=%s move=%s turns=%s multiplier=%.2f score: %s -> %s",
+                    battle.weather,
+                    move_choice,
+                    battle.weather_turns_remaining,
+                    weather_strategy_multiplier,
                     round(score, 3),
                     round(adjusted_score, 3),
                 )

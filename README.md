@@ -156,6 +156,7 @@ Core improvements integrated from [Agetian/showdown-battlebot](https://github.co
 - Sleep/Rest Talk tracking and management
 - Hazard stacking prevention
 - Weather-aware move and switch heuristics
+- Weather maintenance strategy heuristics
 - Status-aware move and switch heuristics
 - Enhanced generation-specific logic
 - Trick Room state awareness
