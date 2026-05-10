@@ -99,3 +99,8 @@ For example, to re-install the engine for generation 4:
 ```shell
 make poke_engine GEN=gen4
 ```
+
+If you are working from the vendored copy in this repository, use:
+```shell
+make poke_engine_local GEN=<generation>
+```

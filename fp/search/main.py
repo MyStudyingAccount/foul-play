@@ -68,50 +68,6 @@ def _impostor_switch_multiplier(battle: Battle, target_pkmn):
     return 1.0
 
 
-def _switch_out_move_multiplier(battle: Battle):
-    active = battle.user.active
-    opponent = battle.opponent.active
-    if active is None or opponent is None:
-        return 1.0
-
-    if not any(m.name in constants.SWITCH_OUT_MOVES for m in (active.moves or [])):
-        return 1.0
-
-    try:
-        active_speed = active.calculate_boosted_stats()[constants.SPEED]
-        opponent_speed = opponent.calculate_boosted_stats()[constants.SPEED]
-    except Exception:
-        active_speed = None
-        opponent_speed = None
-
-    incoming_eff = _max_incoming_effectiveness(opponent.moves or [], active.types)
-    outgoing_eff = _max_incoming_effectiveness(active.moves or [], opponent.types)
-
-    hp_fraction = (active.hp or 0) / max(active.max_hp or 1, 1)
-    multiplier = 1.0
-
-    # Low-health pivoters should be more willing to grab momentum with a switch-out move.
-    if hp_fraction <= 0.5:
-        multiplier *= 1.12
-    if hp_fraction <= 0.33:
-        multiplier *= 1.08
-
-    # If we are slower, pivoting is usually safer than trying to trade hits.
-    if active_speed is not None and opponent_speed is not None and active_speed < opponent_speed:
-        multiplier *= 1.15
-
-    # When the opponent has a clearly dangerous attack into our current typing,
-    # prefer pivoting into a better answer.
-    if incoming_eff >= 2:
-        multiplier *= 1.2
-
-    # If our current mon is not threatening much damage, momentum moves become more attractive.
-    if outgoing_eff <= 1:
-        multiplier *= 1.08
-
-    return min(multiplier, 1.5)
-
-
 def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], battle: Battle) -> str:
     final_policy = {}
     for mcts_result, sample_chance, index in mcts_results:
@@ -196,15 +152,6 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
                             )
                         adjusted_score = adjusted_score * impostor_multiplier
 
-                    if move_choice in constants.SWITCH_OUT_MOVES:
-                        switch_out_multiplier = _switch_out_move_multiplier(battle)
-                        if switch_out_multiplier > 1.0:
-                            logger.info(
-                                "Switch-out move bonus: %s -> x%.2f",
-                                move_choice,
-                                switch_out_multiplier,
-                            )
-                        adjusted_score = adjusted_score * switch_out_multiplier
         except Exception:
             # be conservative on any unexpected error
             adjusted_score = score

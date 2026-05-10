@@ -345,7 +345,8 @@ def battle_to_poke_engine_state(battle: Battle, swap=False):
         replace_frustration_last_used_move(battle.user)
 
     # Only enable Terastallization evaluation for Gen 9 to save computational resources
-    enable_tera = "gen9" in battle.generation
+    gen_str = getattr(battle, "generation", None) or ""
+    enable_tera = "gen9" in gen_str
 
     side_one = battler_to_poke_engine_side(
         battle.user, force_switch=battle.force_switch, enable_tera=enable_tera

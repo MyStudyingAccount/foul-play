@@ -23,6 +23,6 @@ poke_engine:
 	echo "Installing $$poke_engine_version with feature $(GEN)"; \
 	pip uninstall -y poke-engine && pip install -v --force-reinstall --no-cache-dir $$poke_engine_version --config-settings="build-args=--features poke-engine/$(GEN) --no-default-features"
 
-# This assumes that the pmariglia/poke-engine repository is in the same directory as foul-play
+# This installs the vendored pmariglia/poke-engine repository checked into vendor/poke-engine
 poke_engine_local:
-	pip uninstall -y poke-engine && pip install -v --force-reinstall --no-cache-dir ../poke-engine/poke-engine-py --config-settings="build-args=--features poke-engine/$(GEN) --no-default-features"
+	pip uninstall -y poke-engine && pip install -v --force-reinstall --no-cache-dir ./vendor/poke-engine/poke-engine-py --config-settings="build-args=--features poke-engine/$(GEN) --no-default-features"

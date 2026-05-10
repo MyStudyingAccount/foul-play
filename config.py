@@ -85,7 +85,8 @@ class _FoulPlayConfig:
     log_level: str
     log_to_file: bool
     detailed_debug: bool
-    damage_debug: bool
+    detailed_debug: bool = False
+    damage_debug: bool = False
     stdout_log_handler: logging.StreamHandler
     file_log_handler: Optional[CustomRotatingFileHandler]
 
