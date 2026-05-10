@@ -55,11 +55,33 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_sets_file(cache_path: str, remote_url: str) -> dict:
+def _fallback_cache_path(cache_path: str) -> str:
+    fallback_root = os.path.join(tempfile.gettempdir(), "foulplay_cache")
+    if cache_path.startswith(PWD):
+        relative_path = os.path.relpath(cache_path, PWD)
+    else:
+        relative_path = os.path.basename(cache_path)
+    return os.path.join(fallback_root, relative_path)
+
+
+def _load_json_if_exists(cache_path: str) -> Optional[dict]:
     if os.path.exists(cache_path):
         with open(cache_path, "r") as f:
-            sets = json.load(f)
+            return json.load(f)
+    return None
+
+
+def get_sets_file(cache_path: str, remote_url: str) -> dict:
+    fallback_cache_path = _fallback_cache_path(cache_path)
+
+    sets = _load_json_if_exists(cache_path)
+    if sets is not None:
         logger.debug(f"Loaded from cache: {cache_path}")
+        return sets
+
+    sets = _load_json_if_exists(fallback_cache_path)
+    if sets is not None:
+        logger.debug(f"Loaded from fallback cache: {fallback_cache_path}")
         return sets
 
     r = requests.get(remote_url)
@@ -72,9 +94,19 @@ def get_sets_file(cache_path: str, remote_url: str) -> dict:
         )
         sets = {}
 
-    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    with open(cache_path, "w") as f:
-        json.dump(sets, f)
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w") as f:
+            json.dump(sets, f)
+    except PermissionError:
+        os.makedirs(os.path.dirname(fallback_cache_path), exist_ok=True)
+        with open(fallback_cache_path, "w") as f:
+            json.dump(sets, f)
+        logger.warning(
+            f"No write permission for cache path {cache_path}; "
+            f"using fallback cache {fallback_cache_path}"
+        )
+
     logger.info(f"Downloaded and cached from remote: {remote_url}")
     return sets
 
@@ -691,21 +723,37 @@ class _SmogonSets(PokemonSets):
     def _get_smogon_stats_json(self, smogon_stats_url):
         cache_file_name = ntpath.basename(smogon_stats_url)
         cache_file = os.path.join(SMOGON_CACHE_DIR, cache_file_name)
-        if os.path.exists(cache_file):
-            with open(cache_file, "r") as f:
-                infos = json.load(f)
-        else:
-            r = requests.get(smogon_stats_url)
-            if r.status_code == 404:
-                r = requests.get(
-                    self._get_smogon_stats_file_name(
-                        ntpath.basename(smogon_stats_url.replace("-0.json", "")),
-                        month_delta=2,
-                    )
+        fallback_cache_file = _fallback_cache_path(cache_file)
+
+        infos = _load_json_if_exists(cache_file)
+        if infos is not None:
+            return infos
+
+        infos = _load_json_if_exists(fallback_cache_file)
+        if infos is not None:
+            return infos
+
+        r = requests.get(smogon_stats_url)
+        if r.status_code == 404:
+            r = requests.get(
+                self._get_smogon_stats_file_name(
+                    ntpath.basename(smogon_stats_url.replace("-0.json", "")),
+                    month_delta=2,
                 )
-            infos = r.json()["data"]
+            )
+        infos = r.json()["data"]
+
+        try:
             with open(cache_file, "w") as f:
                 json.dump(infos, f)
+        except PermissionError:
+            os.makedirs(os.path.dirname(fallback_cache_file), exist_ok=True)
+            with open(fallback_cache_file, "w") as f:
+                json.dump(infos, f)
+            logger.warning(
+                f"No write permission for cache path {cache_file}; "
+                f"using fallback cache {fallback_cache_file}"
+            )
 
         return infos
 
