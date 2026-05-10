@@ -12,6 +12,7 @@ import logging
 import typing
 from typing import Tuple
 from typing import Optional
+import tempfile
 
 
 import constants
@@ -21,9 +22,18 @@ from fp.helpers import normalize_name
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 SMOGON_CACHE_DIR = os.path.join(PWD, "smogon_stats_cache")
-os.makedirs(SMOGON_CACHE_DIR, exist_ok=True)
+try:
+    os.makedirs(SMOGON_CACHE_DIR, exist_ok=True)
+except PermissionError:
+    SMOGON_CACHE_DIR = os.path.join(tempfile.gettempdir(), "foulplay_smogon_stats_cache")
+    os.makedirs(SMOGON_CACHE_DIR, exist_ok=True)
+
 PKMN_SETS_CACHE_DIR = os.path.join(PWD, "pkmn_sets_cache")
-os.makedirs(PKMN_SETS_CACHE_DIR, exist_ok=True)
+try:
+    os.makedirs(PKMN_SETS_CACHE_DIR, exist_ok=True)
+except PermissionError:
+    PKMN_SETS_CACHE_DIR = os.path.join(tempfile.gettempdir(), "foulplay_pkmn_sets_cache")
+    os.makedirs(PKMN_SETS_CACHE_DIR, exist_ok=True)
 
 PKMN_SETS_REMOTE_BASE_URL = "https://data.foulplay.cc/{}/{}"
 PS_SETS_REMOTE_BASE_URL = "https://play.pokemonshowdown.com/data/sets/{}"
