@@ -469,7 +469,7 @@ async def start_battle(ps_websocket_client, pokemon_battle_type, team_dict):
             ps_websocket_client, pokemon_battle_type, team_dict
         )
 
-    await ps_websocket_client.send_message(battle.battle_tag, ["hf"])
+    await ps_websocket_client.send_message(battle.battle_tag, ["I am a bot, have fun and good luck!"])
     await ps_websocket_client.send_message(battle.battle_tag, ["/timer on"])
 
     return battle
