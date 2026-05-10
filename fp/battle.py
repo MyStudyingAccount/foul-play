@@ -751,10 +751,9 @@ class Pokemon:
             logger.warning("{} is not a known move".format(move_name))
             return None
 
-        # Avoid adding duplicate moves (some formats report variants like frustration1)
-        for m in self.moves:
-            if m.name == new_move.name:
-                return m
+        existing_move = self.get_move(move_name)
+        if existing_move is not None:
+            return existing_move
 
         self.moves.append(new_move)
         return new_move

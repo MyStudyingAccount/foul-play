@@ -28,6 +28,19 @@ except ModuleNotFoundError:
 logger = logging.getLogger(__name__)
 
 
+def _compact_moves_for_engine(moves):
+    """Deduplicate moves, keeping only one instance of each move."""
+    compacted_moves = []
+    seen_moves = set()
+    for move in moves:
+        if move.name in seen_moves:
+            continue
+        compacted_moves.append(move)
+        seen_moves.add(move.name)
+
+    return compacted_moves
+
+
 def status_to_string(status):
     if status == constants.SLEEP:
         return "Sleep"
@@ -62,19 +75,12 @@ def pokemon_to_poke_engine_pkmn(pkmn: Pokemon, enable_tera: bool = True):
         base_types = (base_types[0], "typeless")
     if len(pkmn.types) == 1:
         pkmn.types = (pkmn.types[0], "typeless")
-    num_moves = len(pkmn.moves)
-    if num_moves > 4:
-        logger.warning(
-            "More than 4 moves on pokemon: {} moves: {}".format(
-                pkmn.name, [m.name for m in pkmn.moves]
-            )
-        )
-        logger.warning("Truncating moves to first 4")
-        pkmn.moves = pkmn.moves[:4]
+    pkmn_moves_source = _compact_moves_for_engine(pkmn.moves)
+    num_moves = len(pkmn_moves_source)
 
     pkmn_moves = [
         PokeEngineMove(id=str(m.name), disabled=m.disabled, pp=m.current_pp)
-        for m in pkmn.moves
+        for m in pkmn_moves_source
     ]
     while num_moves < 4:
         pkmn_moves.append(PokeEngineMove(id="none", disabled=True, pp=0))

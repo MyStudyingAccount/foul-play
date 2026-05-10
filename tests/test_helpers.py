@@ -3,6 +3,8 @@ import unittest
 from data.pkmn_sets import spreads_are_alike
 from fp.helpers import get_pokemon_info_from_condition
 from fp.helpers import normalize_name
+from fp.battle import Pokemon
+from fp.search.poke_engine_helpers import pokemon_to_poke_engine_pkmn
 
 
 class TestSpreadsAreAlike(unittest.TestCase):
@@ -104,4 +106,20 @@ class TestGetPokemonInfoFromCondition(unittest.TestCase):
         condition_string = "20/100r brn"
         self.assertEqual(
             (20, 100, "brn"), get_pokemon_info_from_condition(condition_string)
+        )
+
+
+class TestPokemonToPokeEnginePkmn(unittest.TestCase):
+    def test_deduplicates_moves_without_truncation(self):
+        pkmn = Pokemon("deoxys", 100)
+        for move_name in ["spikes", "taunt", "superpower", "psychoboost", "extremespeed"]:
+            pkmn.add_move(move_name)
+
+        engine_pkmn = pokemon_to_poke_engine_pkmn(pkmn)
+
+        # Should deduplicate but NOT truncate (all 5 unique moves are kept)
+        self.assertEqual(5, len(engine_pkmn.moves))
+        self.assertEqual(
+            ["spikes", "taunt", "superpower", "psychoboost", "extremespeed"],
+            [move.id for move in engine_pkmn.moves],
         )

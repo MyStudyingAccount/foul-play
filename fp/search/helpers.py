@@ -36,8 +36,9 @@ def populate_pkmn_from_set(
     pkmn: Pokemon, set_: PredictedPokemonSet, source: str = None
 ):
     from config import FoulPlayConfig
+    from copy import copy
     
-    known_pokemon_moves = pkmn.moves
+    known_pokemon_moves = copy(pkmn.moves)  # Create a shallow copy to break reference sharing
 
     pkmn.moves = []
     for mv in set_.pkmn_moveset.moves:
