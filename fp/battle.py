@@ -381,9 +381,10 @@ class Battler:
             except StopIteration:
                 pass
 
-        for index, pkmn_dict in enumerate(
-            request_json[constants.SIDE][constants.POKEMON]
-        ):
+        request_pokemon = request_json[constants.SIDE][constants.POKEMON]
+        reserve_slot = 0
+
+        for index, pkmn_dict in enumerate(request_pokemon):
             request_pkmn_index = index + 1
             switch_string_pkmn = Pokemon.from_switch_string(
                 pkmn_dict[constants.DETAILS]
@@ -407,19 +408,22 @@ class Battler:
 
                 pkmn = self.active
             else:
-                # Duplicate species are legal in some formats; prefer stable identity
-                # from request slot index, then nickname, and finally species fallback.
-                pkmn = self.find_reserve_pokemon_by_index(request_pkmn_index)
-                if pkmn is None and pkmn_nickname:
+                # Reserve ordering in request_json matches the battler's slot ordering.
+                # Use the positional reserve slot so duplicate species and stale indices
+                # do not cause one Pokemon's data to be written onto another.
+                if reserve_slot < len(self.reserve):
+                    pkmn = self.reserve[reserve_slot]
+                else:
                     pkmn = self.find_reserve_pokemon_by_nickname(pkmn_nickname)
-                if pkmn is None:
-                    pkmn = self.find_pokemon_in_reserves(pkmn_name)
-                if pkmn is None:
-                    pkmn = Pokemon.from_switch_string(
-                        pkmn_dict[constants.DETAILS],
-                        nickname=pkmn_dict[constants.IDENT],
-                    )
-                    self.reserve.append(pkmn)
+                    if pkmn is None:
+                        pkmn = self.find_pokemon_in_reserves(pkmn_name)
+                    if pkmn is None:
+                        pkmn = Pokemon.from_switch_string(
+                            pkmn_dict[constants.DETAILS],
+                            nickname=pkmn_dict[constants.IDENT],
+                        )
+                        self.reserve.append(pkmn)
+                reserve_slot += 1
                 for move_name in pkmn_dict[constants.MOVES]:
                     if not pkmn.get_move(move_name):
                         pkmn.add_move(move_name)
