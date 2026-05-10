@@ -87,6 +87,13 @@ class _FoulPlayConfig:
     detailed_debug: bool
     detailed_debug: bool = False
     damage_debug: bool = False
+    state_search_depth: int = 2
+    dynamic_search_enabled: bool = False
+    dynamic_search_opts_for_max: int = 4
+    dynamic_search_battle_threshold: int = 20
+    battle_timer_enabled: bool = True
+    expected_mods: list[str] = None
+    allow_tera_to_stellar_type: bool = True
     stdout_log_handler: logging.StreamHandler
     file_log_handler: Optional[CustomRotatingFileHandler]
 
@@ -127,6 +134,47 @@ class _FoulPlayConfig:
             type=int,
             default=1,
             help="Number of states to search in parallel",
+        )
+        parser.add_argument(
+            "--state-search-depth",
+            type=int,
+            default=2,
+            choices=[0, 1, 2, 3, 4],
+            help="Search depth (0=dynamic, 1-4=fixed depth). Default is 2",
+        )
+        parser.add_argument(
+            "--dynamic-search-opts-for-max",
+            type=int,
+            default=4,
+            help="Max number of options to search at depth 4 when dynamic search is enabled",
+        )
+        parser.add_argument(
+            "--dynamic-search-battle-threshold",
+            type=int,
+            default=20,
+            help="Number of battles before dynamic search increases depth to 3",
+        )
+        parser.add_argument(
+            "--disable-battle-timer",
+            action="store_true",
+            help="Disable the 5-minute battle timer",
+        )
+        parser.add_argument(
+            "--expected-mods",
+            default=None,
+            nargs="+",
+            help="Mods to expect (e.g. scalemons camomons 350cup). Bot will adjust pokemon stats accordingly.",
+        )
+        parser.add_argument(
+            "--allow-tera-to-stellar-type",
+            action="store_true",
+            default=True,
+            help="Allow pokemon to terastallize to Stellar type (default: True)",
+        )
+        parser.add_argument(
+            "--disable-tera-to-stellar-type",
+            action="store_true",
+            help="Disable Stellar type terastallization (useful for Draft formats)",
         )
         parser.add_argument(
             "--run-count",
@@ -194,6 +242,13 @@ class _FoulPlayConfig:
         self.log_to_file = args.log_to_file
         self.detailed_debug = args.detailed_debug
         self.damage_debug = args.damage_debug
+        self.state_search_depth = args.state_search_depth
+        self.dynamic_search_enabled = args.state_search_depth == 0
+        self.dynamic_search_opts_for_max = args.dynamic_search_opts_for_max
+        self.dynamic_search_battle_threshold = args.dynamic_search_battle_threshold
+        self.battle_timer_enabled = not args.disable_battle_timer
+        self.expected_mods = args.expected_mods or []
+        self.allow_tera_to_stellar_type = not args.disable_tera_to_stellar_type
 
         self.validate_config()
 

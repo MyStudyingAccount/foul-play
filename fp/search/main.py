@@ -18,6 +18,52 @@ from fp.search.poke_engine_helpers import battle_to_poke_engine_state
 
 logger = logging.getLogger(__name__)
 
+# Track battle count for dynamic search depth
+_battle_count = 0
+
+
+def calculate_dynamic_search_depth(battle_count: int) -> int:
+    """
+    Calculate search depth based on battle count for dynamic search.
+    Early battles use shallow search, later battles use deeper search.
+    
+    Returns the search depth multiplier (1-4)
+    """
+    if not FoulPlayConfig.dynamic_search_enabled:
+        return FoulPlayConfig.state_search_depth
+    
+    # Early game: shallow search (depth 1-2)
+    if battle_count < FoulPlayConfig.dynamic_search_battle_threshold:
+        return 1
+    
+    # Mid game: moderate search (depth 2-3)
+    elif battle_count < FoulPlayConfig.dynamic_search_battle_threshold * 2:
+        return 2
+    
+    # Late game: deep search (depth 3-4)
+    else:
+        return 3
+
+
+def get_search_time_for_depth(base_time_ms: int, depth: int) -> int:
+    """
+    Calculate actual search time based on depth.
+    Deeper searches get more time to explore possibilities.
+    
+    Depth 1: 25% of base time
+    Depth 2: 50% of base time
+    Depth 3: 75% of base time
+    Depth 4: 100% of base time
+    """
+    if depth <= 1:
+        return max(base_time_ms // 4, 25)
+    elif depth <= 2:
+        return base_time_ms // 2
+    elif depth <= 3:
+        return int(base_time_ms * 0.75)
+    else:  # depth 4
+        return base_time_ms
+
 
 def _max_incoming_effectiveness(attacker_moves, defender_types):
     max_eff = 0
@@ -88,9 +134,54 @@ def select_move_from_mcts_results(mcts_results: list[(MctsResult, float, int)], 
 
     # Apply simple ability-aware adjustments (e.g., preferring switches to Magic Bounce)
     adjusted_policy = {}
+    
+    # Log Trick Room state for awareness
+    if battle.trick_room:
+        logger.info(
+            "Trick Room active: {} turns remaining. Speed priorities are REVERSED.".format(
+                battle.trick_room_turns_remaining
+            )
+        )
+    
     for move_choice, score in final_policy.items():
         adjusted_score = score
         try:
+            # Reduce Sleep Talk usage if we've already used it multiple turns
+            if "sleeptalk" in move_choice.lower():
+                sleep_count = battle.user.side_conditions.get(constants.SLEEP_COUNT, 0)
+                # Penalize Sleep Talk after 2 turns to avoid overuse (prevent locked into it)
+                if sleep_count >= 2:
+                    penalty = 0.6 if sleep_count == 2 else 0.3
+                    adjusted_score = adjusted_score * penalty
+                    logger.info(
+                        "Sleep Talk penalty applied: sleep_count={}, penalty={}, score: {} -> {}".format(
+                            sleep_count, penalty, round(score, 3), round(adjusted_score, 3)
+                        )
+                    )
+            
+            # Penalize hazard moves when hazards are already at max layers on opponent's side
+            hazard_move_mapping = {
+                "stealthrock": (constants.STEALTH_ROCK, 1),  # (constant, max_layers)
+                "spikes": (constants.SPIKES, 3),
+                "toxicspikes": (constants.TOXIC_SPIKES, 2),
+            }
+            
+            move_lower = move_choice.lower() if not move_choice.startswith("switch ") else ""
+            for hazard_move, (hazard_constant, max_layers) in hazard_move_mapping.items():
+                if hazard_move in move_lower:
+                    opponent_hazard_layers = battle.opponent.side_conditions.get(hazard_constant, 0)
+                    if opponent_hazard_layers >= max_layers:
+                        # Heavy penalty for adding hazards when already maxed
+                        penalty = 0.1
+                        adjusted_score = adjusted_score * penalty
+                        logger.info(
+                            "Hazard stacking prevention: {} already at {}/{} layers, penalty={}, score: {} -> {}".format(
+                                hazard_constant, opponent_hazard_layers, max_layers, 
+                                penalty, round(score, 3), round(adjusted_score, 3)
+                            )
+                        )
+                    break
+            
             if move_choice.startswith("switch "):
                 target_raw = move_choice.split(" ", 1)[1].strip()
                 target_pkmn = None
@@ -224,6 +315,9 @@ def search_time_num_battles_standard_battle(battle):
 
 
 def find_best_move(battle: Battle) -> str:
+    global _battle_count
+    _battle_count += 1
+    
     battle = deepcopy(battle)
     if battle.team_preview:
         battle.user.active = battle.user.reserve.pop(0)
@@ -246,6 +340,25 @@ def find_best_move(battle: Battle) -> str:
         battles = prepare_battles(battle, num_battles)
     else:
         raise ValueError("Unsupported battle type: {}".format(battle.battle_type))
+
+    # Apply dynamic search depth adjustment if enabled
+    if FoulPlayConfig.dynamic_search_enabled:
+        current_depth = calculate_dynamic_search_depth(_battle_count)
+        search_time_per_battle = get_search_time_for_depth(search_time_per_battle, current_depth)
+        logger.info(
+            "Dynamic search: Battle #{}, depth={}, adjusted_time={}ms".format(
+                _battle_count, current_depth, search_time_per_battle
+            )
+        )
+        
+        # Limit number of battles at maximum depth if we have many options
+        if current_depth >= 4 and len(battles) > FoulPlayConfig.dynamic_search_opts_for_max:
+            logger.info(
+                "Limiting battles from {} to {} at max depth {}".format(
+                    len(battles), FoulPlayConfig.dynamic_search_opts_for_max, current_depth
+                )
+            )
+            battles = battles[:FoulPlayConfig.dynamic_search_opts_for_max]
 
     logger.debug("Searching for a move using MCTS...")
     logger.debug(

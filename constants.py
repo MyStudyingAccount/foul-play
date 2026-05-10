@@ -216,6 +216,7 @@ PARALYZED = "par"
 POISON = "psn"
 TOXIC = "tox"
 TOXIC_COUNT = "toxic_count"
+SLEEP_COUNT = "sleep_count"
 NON_VOLATILE_STATUSES = {SLEEP, BURN, FROZEN, PARALYZED, POISON, TOXIC}
 
 IMMUNE_TO_POISON_ABILITIES = {"immunity", "pastelveil"}

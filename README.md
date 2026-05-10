@@ -104,3 +104,58 @@ If you are working from the vendored copy in this repository, use:
 ```shell
 make poke_engine_local GEN=<generation>
 ```
+
+## Recent Improvements
+
+This fork includes several enhancements over the base foul-play implementation:
+
+### AI Improvements
+
+- **Dynamic Search Depth**: Adjusts MCTS search depth based on battle count for better early-game speed and late-game depth
+  - Use `--state-search-depth 0` to enable (default is 2)
+  - Early battles (< threshold): shallow search (depth 1)
+  - Late battles (> threshold): deep search (depth 3-4)
+  - Configurable via `--dynamic-search-opts-for-max` and `--dynamic-search-battle-threshold`
+
+- **Sleep/Rest Talk Awareness**: Tracks sleep turns to prevent overuse of Sleep Talk
+  - Automatically reduces Sleep Talk scoring after 2-3 consecutive turns
+  - Prevents getting locked into Sleep Talk for extended periods
+
+- **Hazard Stacking Prevention**: Prevents redundant hazard placement
+  - Stealth Rock: max 1 layer
+  - Spikes: max 3 layers  
+  - Toxic Spikes: max 2 layers
+  - Heavily penalizes hazard moves when already at maximum layers
+
+- **Trick Room Awareness**: Properly understands Trick Room mechanics
+  - Logs Trick Room state and turns remaining
+  - Informs move selection that speed priorities are reversed
+
+### Configuration Options
+
+New command-line arguments for fine-tuning:
+
+```bash
+# Search depth control
+--state-search-depth 0          # Enable dynamic search depth (0=dynamic, 1-4=fixed)
+--dynamic-search-opts-for-max 4 # Max options to search at max depth
+--dynamic-search-battle-threshold 20  # Battles before depth increases
+
+# Battle settings
+--disable-battle-timer          # Disable 5-minute timer for deeper searches
+
+# Format-specific
+--expected-mods scalemons camomons  # Tell bot to expect stat modifications
+--disable-tera-to-stellar-type      # Disallow Stellar terastallization (for Draft formats)
+```
+
+## Credits
+
+Core improvements integrated from [Agetian/showdown-battlebot](https://github.com/Agetian/showdown-battlebot):
+- Dynamic search depth algorithm
+- Sleep/Rest Talk tracking and management
+- Hazard stacking prevention
+- Enhanced generation-specific logic
+- Trick Room state awareness
+
+Base project: [pmariglia/foul-play](https://github.com/pmariglia/foul-play)

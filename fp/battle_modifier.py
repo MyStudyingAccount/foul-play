@@ -2307,6 +2307,26 @@ def cant(battle, split_msg):
 
 
 def upkeep(battle, _):
+    # Track sleep turns to help the bot not overuse Sleep Talk
+    # Note: side_conditions currently only allows ints, so we can only track one pokemon per side
+    # At least most formats have Sleep Clause
+    for side in [battle.user, battle.opponent]:
+        side_string = "opponent" if side == battle.opponent else "user"
+        if side.active.status == constants.SLEEP:
+            # Make sure this wasn't a sleeping mon brought in from U-turn etc.
+            last_move = side.last_used_move
+            if last_move.pokemon_name == side.active.name:
+                side.side_conditions[constants.SLEEP_COUNT] += 1
+                logger.debug(
+                    "Incrementing sleep count for {} to {}".format(
+                        side_string, side.side_conditions[constants.SLEEP_COUNT]
+                    )
+                )
+        else:
+            # Reset sleep count when pokemon wakes up
+            if side.side_conditions[constants.SLEEP_COUNT] > 0:
+                side.side_conditions[constants.SLEEP_COUNT] = 0
+
     if battle.trick_room:
         battle.trick_room_turns_remaining -= 1
         logger.info(
