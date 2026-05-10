@@ -18,14 +18,14 @@ RUN mkdir ./packages && \
 
 FROM python:3.13-slim
 
-WORKDIR /foul-play
+WORKDIR /beat-up
 
-COPY config.py /foul-play/config.py
-COPY constants.py /foul-play/constants.py
-COPY data /foul-play/data
-COPY run.py /foul-play/run.py
-COPY fp /foul-play/fp
-COPY teams /foul-play/teams
+COPY config.py /beat-up/config.py
+COPY constants.py /beat-up/constants.py
+COPY data /beat-up/data
+COPY run.py /beat-up/run.py
+COPY fp /beat-up/fp
+COPY teams /beat-up/teams
 
 COPY --from=build /packages/ /usr/local/lib/python3.13/site-packages/
 
