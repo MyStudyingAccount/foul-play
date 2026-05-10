@@ -749,6 +749,11 @@ def faint(battle, split_msg):
         side = battle.user
 
     side.active.hp = 0
+    # Remove the fainted pokemon from reserves to maintain reserve_slot indexing
+    # When a pokemon faints, it should not stay in the reserves list, otherwise
+    # subsequent request updates will misalign reserve slots with request pokemon order
+    if side.active in side.reserve:
+        side.reserve.remove(side.active)
 
 
 def fail(battle, split_msg):
