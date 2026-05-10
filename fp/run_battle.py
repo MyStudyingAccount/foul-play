@@ -120,10 +120,11 @@ def _resolve_switch_slot(battle, switch_pokemon):
     else:
         chosen = matches[0]
 
-    # The chosen Pokemon must be in reserve (not active).
-    if chosen is battle.user.active:
+    # During team preview, battle.user.active is a dummy Pokemon, so we can select any real Pokemon.
+    # In normal battle, active Pokemon cannot be switched to (it's already in battle).
+    if not getattr(battle, "team_preview", False) and chosen is battle.user.active:
         raise ValueError(
-            "Switch target cannot be the active Pokemon. Target='{}' is active.".format(
+            "Switch target cannot be the active Pokemon. Target='{}' is already active.".format(
                 switch_pokemon
             )
         )
@@ -137,14 +138,6 @@ def _resolve_switch_slot(battle, switch_pokemon):
             "Chosen Pokemon {} has no index field. Cannot resolve to slot. "
             "This may indicate battle state is out of sync with server.".format(
                 chosen.name
-            )
-        )
-    
-    if slot == 1:
-        raise ValueError(
-            "Resolved switch target to active Pokemon slot (slot=1). "
-            "Target='{}' index={}. This indicates battle state is corrupted.".format(
-                switch_pokemon, slot
             )
         )
 
